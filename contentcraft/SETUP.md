@@ -26,7 +26,7 @@ npm install
 cp .env.example .env
 # Edit .env — fill in DATABASE_URL, AI credentials, and NextAuth secret
 # Minimum required for local dev:
-# DATABASE_URL="file:./prisma/dev.db"
+# DATABASE_URL="file:./dev.db"
 # OPENAI_API_KEY="sk-..."
 # NEXTAUTH_SECRET="$(openssl rand -base64 32)"
 ```

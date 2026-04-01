@@ -9,6 +9,8 @@ out/
 .env
 .env.local
 .env.*.local
+dev.db
+prisma/dev.db
 
 # Prisma generated client
 prisma/generated/
