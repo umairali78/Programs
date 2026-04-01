@@ -1,6 +1,7 @@
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 import type { GeneratedScript, ResearchBrief } from '@prisma/client'
+import { parseJsonField } from '@/lib/utils/json'
 
 interface ExportMetadata {
   sloText: string
@@ -35,7 +36,7 @@ export async function exportScriptAsDocx(
   script: GeneratedScript,
   templateDocxBuffer?: Buffer
 ): Promise<Buffer> {
-  const meta = script.generationMetadata as Record<string, unknown>
+  const meta = parseJsonField<Record<string, unknown>>(script.generationMetadata, {})
 
   const metadataBlock = getMetadataBlock({
     sloText: (meta.sloText as string) ?? '',
@@ -64,9 +65,10 @@ export async function exportScriptAsDocx(
 }
 
 export async function exportBriefAsDocx(brief: ResearchBrief): Promise<Buffer> {
-  const vocab = (brief.keyVocabulary as { term: string; definition: string; gradeAppropriateExample: string }[]) ?? []
-  const examples = (brief.pakistanExamples as string[]) ?? []
-  const misconceptions = (brief.commonMisconceptions as string[]) ?? []
+  const vocab = parseJsonField<{ term: string; definition: string; gradeAppropriateExample: string }[]>(brief.keyVocabulary, [])
+  const examples = parseJsonField<string[]>(brief.pakistanExamples, [])
+  const misconceptions = parseJsonField<string[]>(brief.commonMisconceptions, [])
+  const prerequisites = parseJsonField<string[]>(brief.prerequisites, [])
 
   const content = `
 ContentCraft AI Engine — Research Brief
@@ -80,7 +82,7 @@ CORE CONCEPT
 ${brief.coreConcept ?? ''}
 
 PREREQUISITES
-${(brief.prerequisites as string[])?.map((p) => `• ${p}`).join('\n') ?? ''}
+${prerequisites.map((p) => `• ${p}`).join('\n')}
 
 KEY VOCABULARY (${vocab.length} terms)
 ${vocab.map((v) => `• ${v.term}: ${v.definition}\n  Example: ${v.gradeAppropriateExample}`).join('\n')}

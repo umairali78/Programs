@@ -4,7 +4,8 @@ import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import { contentGenerationQueue } from '@/lib/queue'
 import { getActiveStandardsVersion } from '@/lib/db/standards'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const ApproveSchema = z.object({
   briefId: z.string(),
@@ -34,7 +35,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // Apply user edits if any
     const briefUpdate: Record<string, unknown> = { status: 'approved' }
     if (edits) {
-      Object.assign(briefUpdate, edits)
+      Object.assign(briefUpdate, {
+        ...edits,
+        prerequisites: edits.prerequisites ? stringifyJsonField(edits.prerequisites) : undefined,
+        keyVocabulary: edits.keyVocabulary ? stringifyJsonField(edits.keyVocabulary) : undefined,
+        pakistanExamples: edits.pakistanExamples ? stringifyJsonField(edits.pakistanExamples) : undefined,
+        commonMisconceptions: edits.commonMisconceptions ? stringifyJsonField(edits.commonMisconceptions) : undefined,
+      })
       briefUpdate.editedByUser = true
       briefUpdate.version = brief.version + 1
     }
@@ -57,8 +64,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       data: {
         researchBriefId: briefId,
         status: 'GENERATING',
-        selectedCOs,
-        templateVersionsUsed,
+        selectedCOs: stringifyJsonField(selectedCOs),
+        templateVersionsUsed: stringifyJsonField(templateVersionsUsed),
         standardsVersionUsed: standardsVersion,
         createdById: session.user.id,
       },
@@ -70,10 +77,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         const script = await prisma.generatedScript.create({
           data: {
             runId: run.id,
-            contentObjectType: coType as ContentObjectType,
+            contentObjectType: coType,
             version: 1,
             scriptText: '',
-            generationMetadata: { status: 'queued' },
+            generationMetadata: stringifyJsonField({ status: 'queued' }),
           },
         })
 
@@ -94,7 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         entityId: run.id,
         action: 'BRIEF_APPROVED_GENERATION_STARTED',
         userId: session.user.id,
-        metadata: { briefId, selectedCOs, scriptCount: scriptJobs.length },
+        metadata: stringifyJsonField({ briefId, selectedCOs, scriptCount: scriptJobs.length }),
       },
     })
 

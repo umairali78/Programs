@@ -8,11 +8,7 @@ Install the following before running the project:
 # 1. Install Node.js (via Homebrew — recommended on macOS)
 brew install node
 
-# 2. Install PostgreSQL
-brew install postgresql@16
-brew services start postgresql@16
-
-# 3. Install Redis
+# 2. Install Redis
 brew install redis
 brew services start redis
 ```
@@ -28,30 +24,20 @@ npm install
 ### 2. Configure environment
 ```bash
 cp .env.example .env
-# Edit .env — fill in DATABASE_URL, ANTHROPIC_API_KEY, S3_* credentials
+# Edit .env — fill in DATABASE_URL, AI credentials, and NextAuth secret
 # Minimum required for local dev:
-# DATABASE_URL="postgresql://$(whoami)@localhost:5432/contentcraft"
-# ANTHROPIC_API_KEY="sk-ant-..."
+# DATABASE_URL="file:./prisma/dev.db"
+# OPENAI_API_KEY="sk-..."
 # NEXTAUTH_SECRET="$(openssl rand -base64 32)"
 ```
 
-### 3. Create database
-```bash
-createdb contentcraft
-```
-
-### 4. Enable pgvector extension
-```bash
-psql contentcraft -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-### 5. Run migrations & generate Prisma client
+### 3. Create the SQLite database and Prisma client
 ```bash
 npm run db:push       # push schema to DB (dev)
 npm run db:generate   # generate Prisma client
 ```
 
-### 6. Seed the database (creates admin user)
+### 4. Seed the database (creates admin user)
 ```bash
 npx prisma db seed
 # Admin credentials: admin@contentcraft.app / Admin1234!
@@ -79,35 +65,21 @@ Open http://localhost:3000 and log in with `admin@contentcraft.app` / `Admin1234
 4. **Create Users** → Admin → Users → Add instructional designers, writers, reviewers
 5. **Generate Content** → New Generation → Enter SLO → Review Brief → Approve → View Scripts
 
-## S3 Storage
+## Local Storage
 
-For local development you can use **MinIO** as a local S3-compatible server:
+Uploaded templates and standards guides are stored on disk under `STORAGE_DIR` (defaults to `./storage` inside the app).
 
-```bash
-brew install minio
-minio server ~/minio-data --console-address ":9001"
-# Console: http://localhost:9001 (minioadmin / minioadmin)
-# Set in .env:
-# S3_ENDPOINT="http://localhost:9000"
-# S3_ACCESS_KEY_ID="minioadmin"
-# S3_SECRET_ACCESS_KEY="minioadmin"
-# S3_BUCKET="contentcraft"
-# S3_REGION="us-east-1"
-```
+## AI Providers
 
-## Embeddings (Vector Search)
-
-The app uses Voyage AI for embeddings (Anthropic's recommended partner):
-
-1. Get a free API key at https://www.voyageai.com
-2. Add to `.env`: `VOYAGE_API_KEY="pa-..."`
-
-Without `VOYAGE_API_KEY`, the app falls back to zero vectors (vector search disabled) — generation still works but standards retrieval will return random chunks.
+- Default setup uses OpenAI with `AI_PROVIDER="openai"` and `OPENAI_API_KEY`.
+- Anthropic is still supported with `AI_PROVIDER="anthropic"` and `ANTHROPIC_API_KEY`.
+- Embeddings are independently configurable with `AI_EMBED_PROVIDER="openai" | "voyage" | "none"`.
+- If no embedding provider is configured, the app falls back to zero vectors and keyword overlap for standards retrieval.
 
 ## Architecture Notes
 
 - **Next.js** handles the web UI and API routes
 - **BullMQ worker** (separate process) handles all AI jobs asynchronously
 - **SSE** (`/api/runs/[id]/stream`) pushes generation progress to the browser in real time
-- **pgvector** enables cosine similarity search over standards guide chunks
+- Standards guides and templates are stored on disk for local development
 - All prompts are stored in the database — never hardcoded

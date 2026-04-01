@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     await prisma.auditLog.create({
       data: {
         entityType: 'StandardsGuide', entityId: params.id,
-        action: 'ACTIVATED', userId: session.user.id, metadata: {},
+        action: 'ACTIVATED', userId: session.user.id, metadata: stringifyJsonField({}),
       },
     })
     return NextResponse.json({ id: params.id, isActive: true })

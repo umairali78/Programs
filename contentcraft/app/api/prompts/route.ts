@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const Schema = z.object({
   contentObjectType: z.enum(['CO1','CO2','CO3','CO4','CO5','CO6','CO7']),
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
       data: {
         entityType: 'PromptLibrary', entityId: prompt.id,
         action: 'UPDATED', userId: session.user.id,
-        metadata: { coType: data.contentObjectType, version: nextVersion },
+        metadata: stringifyJsonField({ coType: data.contentObjectType, version: nextVersion }),
       },
     })
 

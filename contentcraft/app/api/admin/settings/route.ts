@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +9,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
 
     for (const [key, value] of Object.entries(body)) {
-      const jsonValue = { value: value as number }
+      const jsonValue = stringifyJsonField({ value: value as number })
       await prisma.systemConfig.upsert({
         where: { key },
         update: { value: jsonValue },
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     await prisma.auditLog.create({
       data: {
         entityType: 'SystemConfig', entityId: 'settings',
-        action: 'UPDATED', userId: session.user.id, metadata: body,
+        action: 'UPDATED', userId: session.user.id, metadata: stringifyJsonField(body),
       },
     })
 

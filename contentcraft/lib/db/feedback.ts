@@ -1,6 +1,7 @@
 import { prisma } from './client'
 import { improvementProposalQueue } from '@/lib/queue'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { parseJsonField } from '@/lib/utils/json'
 
 const FEEDBACK_DIMENSIONS = [
   'standardsCompliance',
@@ -84,5 +85,10 @@ export async function checkImprovementTrigger(
 
 async function getSystemConfig(): Promise<Record<string, number>> {
   const configs = await prisma.systemConfig.findMany()
-  return Object.fromEntries(configs.map((c) => [c.key, (c.value as { value: number }).value ?? c.value]))
+  return Object.fromEntries(
+    configs.map((c) => {
+      const parsed = parseJsonField<{ value?: number }>(c.value, {})
+      return [c.key, parsed.value ?? Number(c.value)]
+    })
+  )
 }

@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq'
 import { createRedisConnection, QUEUE_CONTENT_GENERATION, type ContentGenerationJobData } from '../index'
 import { prisma } from '@/lib/db/client'
-import { ai } from '@/lib/ai/client'
+import { ai, getConfiguredAIModel } from '@/lib/ai/client'
 import {
   buildContentGenerationSystemPrompt,
   buildContentGenerationUserPrompt,
@@ -9,7 +9,8 @@ import {
   type GenerationContext,
 } from '@/lib/ai/prompts/content-generation'
 import { findRelevantStandardsChunks } from '@/lib/db/standards'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { parseJsonField, stringifyJsonField } from '@/lib/utils/json'
 import { z } from 'zod'
 
 const ComplianceSummarySchema = z.object({
@@ -28,7 +29,7 @@ export function startContentGenerationWorker() {
 
       await prisma.generatedScript.update({
         where: { id: scriptId },
-        data: { generationMetadata: { status: 'generating' } },
+        data: { generationMetadata: stringifyJsonField({ status: 'generating' }) },
       })
 
       // Load research brief
@@ -56,7 +57,9 @@ export function startContentGenerationWorker() {
 
       const ctx: GenerationContext = {
         researchBrief: brief as unknown as Record<string, unknown>,
-        templateSchema: (template?.parsedSchema as Record<string, unknown>) ?? {},
+        templateSchema: template?.parsedSchema
+          ? parseJsonField<Record<string, unknown>>(template.parsedSchema, {})
+          : {},
         promptLibrary: {
           masterPrompt: promptLib.masterPrompt,
           structuralRules: promptLib.structuralRules,
@@ -97,7 +100,7 @@ export function startContentGenerationWorker() {
         templateVersion: template?.version ?? null,
         standardsVersion: run?.standardsVersionUsed ?? null,
         briefVersion: brief.version,
-        modelId: process.env.AI_MODEL ?? 'claude-sonnet-4-6',
+        modelId: getConfiguredAIModel(),
         generatedAt: new Date().toISOString(),
       }
 
@@ -105,8 +108,8 @@ export function startContentGenerationWorker() {
         where: { id: scriptId },
         data: {
           scriptText,
-          complianceSummary: complianceSummary as object[],
-          generationMetadata: metadata as object,
+          complianceSummary: stringifyJsonField(complianceSummary),
+          generationMetadata: stringifyJsonField(metadata),
           templateId: template?.id,
         },
       })
@@ -127,7 +130,7 @@ export function startContentGenerationWorker() {
     if (job?.data.scriptId) {
       await prisma.generatedScript.update({
         where: { id: job.data.scriptId },
-        data: { generationMetadata: { status: 'failed', error: String(err) } },
+        data: { generationMetadata: stringifyJsonField({ status: 'failed', error: String(err) }) },
       }).catch(() => {})
       await checkAndCompleteRun(job.data.runId)
     }
@@ -143,13 +146,13 @@ async function checkAndCompleteRun(runId: string) {
   })
 
   const allDone = scripts.every((s) => {
-    const meta = s.generationMetadata as Record<string, string>
+    const meta = parseJsonField<Record<string, string>>(s.generationMetadata, {})
     return meta?.status === 'failed' || meta?.generatedAt
   })
 
   if (allDone) {
     const anyFailed = scripts.some((s) => {
-      const meta = s.generationMetadata as Record<string, string>
+      const meta = parseJsonField<Record<string, string>>(s.generationMetadata, {})
       return meta?.status === 'failed'
     })
     await prisma.generationRun.update({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 // POST /api/templates/[id]/activate — set this template as active for its CO type
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         entityId: params.id,
         action: 'ACTIVATED',
         userId: session.user.id,
-        metadata: { coType: template.contentObjectType, version: template.version },
+        metadata: stringifyJsonField({ coType: template.contentObjectType, version: template.version }),
       },
     })
 

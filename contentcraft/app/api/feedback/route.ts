@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import { checkImprovementTrigger } from '@/lib/db/feedback'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const FeedbackSchema = z.object({
   scriptId: z.string(),
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
         engagementQuality: data.engagementQuality,
         pakistanContextAccuracy: data.pakistanContextAccuracy,
         freeText: data.freeText,
-        annotations: data.annotations ?? [],
+        annotations: stringifyJsonField(data.annotations ?? []),
       },
     })
 

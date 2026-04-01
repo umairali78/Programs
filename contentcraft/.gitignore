@@ -33,3 +33,4 @@ tsconfig.tsbuildinfo
 
 # Misc
 *.pem
+storage/

@@ -4,6 +4,7 @@
  */
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const prisma = new PrismaClient()
 
@@ -37,7 +38,7 @@ async function main() {
     await prisma.systemConfig.upsert({
       where: { key },
       update: {},
-      create: { key, value: { value } },
+      create: { key, value: stringifyJsonField({ value }) },
     })
   }
   console.log('Seeded system config defaults')

@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { parseJsonField } from '@/lib/utils/json'
 import AnalyticsDashboard from './AnalyticsDashboard'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
 
 const CO_TYPES: ContentObjectType[] = ['CO1','CO2','CO3','CO4','CO5','CO6','CO7']
 const DIMS = ['standardsCompliance','gradeAppropriateness','templateAdherence','engagementQuality','pakistanContextAccuracy']
@@ -48,7 +49,7 @@ export default async function AnalyticsPage() {
   })
   const criterionCounts: Record<string, number> = {}
   for (const s of flaggedScripts) {
-    const summary = s.complianceSummary as { criterion: string; status: string }[]
+    const summary = parseJsonField<{ criterion: string; status: string }[]>(s.complianceSummary, [])
     for (const c of summary) {
       if (c.status === 'flag') {
         criterionCounts[c.criterion] = (criterionCounts[c.criterion] ?? 0) + 1

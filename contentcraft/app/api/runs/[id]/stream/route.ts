@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/db/client'
+import { parseJsonField } from '@/lib/utils/json'
 
 // GET /api/runs/[id]/stream — SSE stream for generation progress
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -54,8 +55,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               coType: s.contentObjectType,
               version: s.version,
               reviewStatus: s.reviewStatus,
-              status: (s.generationMetadata as Record<string, string>)?.status ?? 'queued',
-              hasCompliance: Array.isArray(s.complianceSummary) && (s.complianceSummary as unknown[]).length > 0,
+              status: parseJsonField<Record<string, string>>(s.generationMetadata, {}).status ?? 'queued',
+              hasCompliance: parseJsonField<unknown[]>(s.complianceSummary, []).length > 0,
             })),
           })
 

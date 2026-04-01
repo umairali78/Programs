@@ -3,7 +3,7 @@ import { createRedisConnection, QUEUE_TEMPLATE_PARSE, type TemplateParseJobData 
 import { prisma } from '@/lib/db/client'
 import { ai } from '@/lib/ai/client'
 import { buildTemplateParseSystemPrompt } from '@/lib/ai/prompts/content-generation'
-import { downloadFromS3 } from '@/lib/storage/s3'
+import { readStoredFile } from '@/lib/storage/local'
 import { z } from 'zod'
 
 const TemplateParsedSchemaResult = z.object({
@@ -22,15 +22,14 @@ export function startTemplateParseWorker() {
   const worker = new Worker<TemplateParseJobData>(
     QUEUE_TEMPLATE_PARSE,
     async (job: Job<TemplateParseJobData>) => {
-      const { templateId, s3Key, fileName } = job.data
+      const { templateId, storagePath, fileName } = job.data
 
       await prisma.contentTemplate.update({
         where: { id: templateId },
         data: { parseStatus: 'parsing' },
       })
 
-      // Download file from S3
-      const fileBuffer = await downloadFromS3(s3Key)
+      const fileBuffer = await readStoredFile(storagePath)
 
       // Extract text from file
       let text: string

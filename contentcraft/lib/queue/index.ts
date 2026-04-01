@@ -56,13 +56,13 @@ export interface ComplianceCheckJobData {
 
 export interface TemplateParseJobData {
   templateId: string
-  s3Key: string
+  storagePath: string
   fileName: string
 }
 
 export interface StandardsEmbedJobData {
   standardsGuideId: string
-  s3Key: string
+  storagePath: string
 }
 
 export interface ImprovementProposalJobData {

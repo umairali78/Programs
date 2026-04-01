@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import { contentGenerationQueue } from '@/lib/queue'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const RegenerateSchema = z.object({
   instruction: z.string().optional(),
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         scriptText: '',
         regenerationInstruction: instruction ?? null,
         reviewStatus: 'DRAFT',
-        generationMetadata: { status: 'queued' },
+        generationMetadata: stringifyJsonField({ status: 'queued' }),
       },
     })
 

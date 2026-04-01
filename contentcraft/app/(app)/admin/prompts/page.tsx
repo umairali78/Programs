@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import PromptEditor from './PromptEditor'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
 
 const CO_TYPES: ContentObjectType[] = ['CO1', 'CO2', 'CO3', 'CO4', 'CO5', 'CO6', 'CO7']
 const CO_LABELS: Record<string, string> = {

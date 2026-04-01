@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { z, ZodSchema } from 'zod'
+import { ZodSchema } from 'zod'
 
 export interface AIOptions {
   maxTokens?: number
@@ -17,28 +17,13 @@ export interface AIService {
   embed(text: string): Promise<number[]>
 }
 
-// ─── Anthropic Implementation ─────────────────────────────────────────────────
+const DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-latest'
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
+const DEFAULT_OPENAI_EMBED_MODEL = 'text-embedding-3-small'
+const DEFAULT_VOYAGE_EMBED_MODEL = 'voyage-2'
 
-class AnthropicAIService implements AIService {
-  private client: Anthropic
-  private model: string
-
-  constructor() {
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    this.model = process.env.AI_MODEL ?? 'claude-sonnet-4-6'
-  }
-
-  async complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string> {
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: options?.maxTokens ?? 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
-    const block = response.content[0]
-    if (block.type !== 'text') throw new Error('Unexpected response type from AI')
-    return block.text
-  }
+abstract class BaseAIService implements AIService {
+  abstract complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string>
 
   async completeStructured<T>(
     systemPrompt: string,
@@ -51,8 +36,6 @@ class AnthropicAIService implements AIService {
 IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences.`
 
     const raw = await this.complete(enhancedSystem, userPrompt, options)
-
-    // Strip accidental markdown code fences
     const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
 
     let parsed: unknown
@@ -66,35 +49,100 @@ IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, n
   }
 
   async embed(text: string): Promise<number[]> {
-    // Anthropic does not provide embeddings natively — use voyage-ai or a fallback.
-    // Voyage-ai is recommended for Anthropic workloads.
-    // For now we call the Voyage API directly if VOYAGE_API_KEY is set,
-    // otherwise return a zero vector (usable in dev without vector search).
-    if (process.env.VOYAGE_API_KEY) {
-      const res = await fetch('https://api.voyageai.com/v1/embeddings', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.VOYAGE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ model: 'voyage-2', input: [text] }),
-      })
-      if (!res.ok) throw new Error(`Voyage embed failed: ${res.statusText}`)
-      const data = await res.json() as { data: { embedding: number[] }[] }
-      return data.data[0].embedding
-    }
-
-    // Dev fallback: deterministic zero vector of length 1536
-    console.warn('[AI] No VOYAGE_API_KEY set — returning zero vector for embedding')
-    return new Array(1536).fill(0)
+    return generateEmbedding(text)
   }
 }
 
-// ─── Factory ──────────────────────────────────────────────────────────────────
+class AnthropicAIService extends BaseAIService {
+  private client: Anthropic
+  private model: string
+
+  constructor() {
+    super()
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic')
+    }
+    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    this.model = process.env.AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL
+  }
+
+  async complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string> {
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: options?.maxTokens ?? 4096,
+      temperature: options?.temperature,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }],
+    })
+
+    const block = response.content.find((item) => item.type === 'text')
+    if (!block || block.type !== 'text') throw new Error('Unexpected response type from Anthropic')
+    return block.text
+  }
+}
+
+class OpenAIService extends BaseAIService {
+  private apiKey: string
+  private model: string
+
+  constructor() {
+    super()
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required when AI_PROVIDER=openai')
+    }
+    this.apiKey = process.env.OPENAI_API_KEY
+    this.model = process.env.AI_MODEL ?? DEFAULT_OPENAI_MODEL
+  }
+
+  async complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string> {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        temperature: options?.temperature ?? 0.2,
+        max_tokens: options?.maxTokens ?? 4096,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    })
+
+    if (!res.ok) {
+      const details = await res.text()
+      throw new Error(`OpenAI completion failed: ${res.status} ${details}`)
+    }
+
+    const data = await res.json() as {
+      choices?: Array<{
+        message?: {
+          content?: string | Array<{ type?: string; text?: string }>
+        }
+      }>
+    }
+
+    const content = data.choices?.[0]?.message?.content
+    if (typeof content === 'string') return content
+    if (Array.isArray(content)) {
+      return content
+        .filter((part) => part.type === 'text' && typeof part.text === 'string')
+        .map((part) => part.text)
+        .join('\n')
+    }
+
+    throw new Error('Unexpected response type from OpenAI')
+  }
+}
 
 function createAIService(): AIService {
-  const provider = process.env.AI_PROVIDER ?? 'anthropic'
+  const provider = (process.env.AI_PROVIDER ?? 'openai').toLowerCase()
   switch (provider) {
+    case 'openai':
+      return new OpenAIService()
     case 'anthropic':
       return new AnthropicAIService()
     default:
@@ -102,7 +150,82 @@ function createAIService(): AIService {
   }
 }
 
-// Singleton for server-side use
+async function generateEmbedding(text: string): Promise<number[]> {
+  const provider = resolveEmbeddingProvider()
+
+  if (provider === 'openai') {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is required when AI_EMBED_PROVIDER=openai')
+    }
+
+    const res = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.AI_EMBED_MODEL ?? DEFAULT_OPENAI_EMBED_MODEL,
+        input: text,
+      }),
+    })
+
+    if (!res.ok) {
+      const details = await res.text()
+      throw new Error(`OpenAI embed failed: ${res.status} ${details}`)
+    }
+
+    const data = await res.json() as { data?: Array<{ embedding: number[] }> }
+    return data.data?.[0]?.embedding ?? []
+  }
+
+  if (provider === 'voyage') {
+    if (!process.env.VOYAGE_API_KEY) {
+      throw new Error('VOYAGE_API_KEY is required when AI_EMBED_PROVIDER=voyage')
+    }
+
+    const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.VOYAGE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.AI_EMBED_MODEL ?? DEFAULT_VOYAGE_EMBED_MODEL,
+        input: [text],
+      }),
+    })
+
+    if (!res.ok) {
+      const details = await res.text()
+      throw new Error(`Voyage embed failed: ${res.status} ${details}`)
+    }
+
+    const data = await res.json() as { data?: Array<{ embedding: number[] }> }
+    return data.data?.[0]?.embedding ?? []
+  }
+
+  console.warn('[AI] No embedding provider configured; returning zero vector fallback')
+  return new Array(1536).fill(0)
+}
+
+function resolveEmbeddingProvider(): 'openai' | 'voyage' | 'none' {
+  const configured = process.env.AI_EMBED_PROVIDER?.toLowerCase()
+  if (configured === 'openai' || configured === 'voyage' || configured === 'none') {
+    return configured
+  }
+  if (process.env.OPENAI_API_KEY) return 'openai'
+  if (process.env.VOYAGE_API_KEY) return 'voyage'
+  return 'none'
+}
+
+export function getConfiguredAIModel(): string {
+  const provider = (process.env.AI_PROVIDER ?? 'openai').toLowerCase()
+  return process.env.AI_MODEL ?? (
+    provider === 'anthropic' ? DEFAULT_ANTHROPIC_MODEL : DEFAULT_OPENAI_MODEL
+  )
+}
+
 const globalForAI = globalThis as unknown as { ai: AIService | undefined }
 export const ai = globalForAI.ai ?? createAIService()
 if (process.env.NODE_ENV !== 'production') globalForAI.ai = ai

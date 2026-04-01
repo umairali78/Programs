@@ -1,66 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [pgvector(map: "vector")]
-}
-
-// ─── Enums ───────────────────────────────────────────────────────────────────
-
-enum UserRole {
-  ADMIN
-  DESIGNER
-  WRITER
-  REVIEWER
-}
-
-enum ContentObjectType {
-  CO1
-  CO2
-  CO3
-  CO4
-  CO5
-  CO6
-  CO7
-}
-
-enum BloomsLevel {
-  REMEMBER
-  UNDERSTAND
-  APPLY
-  ANALYSE
-  EVALUATE
-  CREATE
-}
-
-enum RunStatus {
-  PENDING
-  RESEARCHING
-  GENERATING
-  COMPLETE
-  FAILED
-}
-
-enum ReviewStatus {
-  DRAFT
-  IN_REVIEW
-  REVISION_REQUESTED
-  APPROVED
-}
-
-enum ProposalType {
-  TEMPLATE
-  PROMPT
-}
-
-enum ProposalStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 // ─── User & Auth ──────────────────────────────────────────────────────────────
@@ -70,7 +14,7 @@ model User {
   email         String    @unique
   name          String?
   password      String?   // hashed with bcrypt
-  role          UserRole  @default(DESIGNER)
+  role          String    @default("DESIGNER")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -95,12 +39,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
+  refresh_token     String?
+  access_token      String?
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String? @db.Text
+  id_token          String?
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -130,7 +74,7 @@ model StandardsGuide {
   id          String   @id @default(cuid())
   version     Int
   isActive    Boolean  @default(false)
-  s3Key       String
+  storagePath String
   fileName    String
   uploadedById String
   uploadedAt  DateTime @default(now())
@@ -145,10 +89,10 @@ model StandardsGuide {
 model StandardsChunk {
   id              String                       @id @default(cuid())
   standardsGuideId String
-  content         String                       @db.Text
-  embedding       Unsupported("vector(1536)")?
+  content         String
+  embedding       String?
   chunkIndex      Int
-  tags            Json                         @default("{}")
+  tags            String                       @default("{}")
   // tags shape: { contentObjectTypes: string[], gradeBands: string[], subjects: string[] }
 
   guide StandardsGuide @relation(fields: [standardsGuideId], references: [id], onDelete: Cascade)
@@ -158,18 +102,18 @@ model StandardsChunk {
 
 model ContentTemplate {
   id                String            @id @default(cuid())
-  contentObjectType ContentObjectType
+  contentObjectType String
   version           Int
   isActive          Boolean           @default(false)
-  s3Key             String
+  storagePath       String
   fileName          String
-  parsedSchema      Json?
+  parsedSchema      String?
   // parsedSchema shape: { sections: [{name, order, targetWordCount}], toneMarkers: string[], formatSignals: string[], wordCountTargets: Record<string, number> }
   parseStatus       String            @default("pending")
   // pending | parsing | parsed | failed
   uploadedById      String
   uploadedAt        DateTime          @default(now())
-  improvementProposals Json           @default("[]")
+  improvementProposals String         @default("[]")
 
   uploadedBy          User                  @relation("UploadedBy", fields: [uploadedById], references: [id])
   generationScripts   GeneratedScript[]
@@ -179,13 +123,13 @@ model ContentTemplate {
 
 model PromptLibrary {
   id                String            @id @default(cuid())
-  contentObjectType ContentObjectType
+  contentObjectType String
   version           Int
   isActive          Boolean           @default(false)
-  masterPrompt      String            @db.Text
-  structuralRules   String            @db.Text
-  outputFormat      String            @db.Text
-  qualityCriteria   String            @db.Text
+  masterPrompt      String
+  structuralRules   String
+  outputFormat      String
+  qualityCriteria   String
   updatedById       String
   updatedAt         DateTime          @default(now())
 
@@ -198,7 +142,7 @@ model PromptLibrary {
 
 model SLORecord {
   id                String   @id @default(cuid())
-  sloText           String   @db.Text
+  sloText           String
   grade             Int
   subject           String
   curriculumContext String   @default("Pakistan NC")
@@ -212,24 +156,24 @@ model SLORecord {
 
 model ResearchBrief {
   id                  String      @id @default(cuid())
-  sloText             String      @db.Text
+  sloText             String
   grade               Int
   subject             String
   curriculumContext   String      @default("Pakistan NC")
   version             Int         @default(1)
-  coreConcept         String?     @db.Text
-  prerequisites       Json        @default("[]")
-  keyVocabulary       Json        @default("[]")
+  coreConcept         String?
+  prerequisites       String      @default("[]")
+  keyVocabulary       String      @default("[]")
   // [{term, definition, gradeAppropriateExample}]
-  pakistanExamples    Json        @default("[]")
-  commonMisconceptions Json       @default("[]")
-  bloomsLevel         BloomsLevel?
-  pedagogicalNotes    String?     @db.Text
+  pakistanExamples    String      @default("[]")
+  commonMisconceptions String     @default("[]")
+  bloomsLevel         String?
+  pedagogicalNotes    String?
   editedByUser        Boolean     @default(false)
-  userNotes           String?     @db.Text
+  userNotes           String?
   status              String      @default("draft")
   // draft | approved
-  regenerationFocus   String?     @db.Text
+  regenerationFocus   String?
   createdById         String
   createdAt           DateTime    @default(now())
 
@@ -242,10 +186,10 @@ model ResearchBrief {
 model GenerationRun {
   id                   String     @id @default(cuid())
   researchBriefId      String
-  status               RunStatus  @default(PENDING)
-  selectedCOs          Json
+  status               String     @default("PENDING")
+  selectedCOs          String
   // ContentObjectType[]
-  templateVersionsUsed Json       @default("{}")
+  templateVersionsUsed String     @default("{}")
   // Record<ContentObjectType, number>
   standardsVersionUsed Int?
   standardsGuideId     String?
@@ -266,16 +210,16 @@ model GenerationRun {
 model GeneratedScript {
   id                      String            @id @default(cuid())
   runId                   String
-  contentObjectType       ContentObjectType
+  contentObjectType       String
   version                 Int               @default(1)
-  scriptText              String            @db.Text
-  complianceSummary       Json              @default("[]")
+  scriptText              String
+  complianceSummary       String            @default("[]")
   // [{criterion, status: 'pass'|'flag', note}]
-  regenerationInstruction String?           @db.Text
-  reviewStatus            ReviewStatus      @default(DRAFT)
+  regenerationInstruction String?
+  reviewStatus            String            @default("DRAFT")
   assignedReviewerId      String?
   templateId              String?
-  generationMetadata      Json              @default("{}")
+  generationMetadata      String            @default("{}")
   // { sloText, grade, subject, curriculumContext, templateVersion, standardsVersion, briefVersion, modelId }
   createdAt               DateTime          @default(now())
 
@@ -301,10 +245,10 @@ model ReviewFeedback {
   templateAdherence         Int      // 1-5
   engagementQuality         Int      // 1-5
   pakistanContextAccuracy   Int      // 1-5
-  freeText                  String?  @db.Text
-  annotations               Json     @default("[]")
+  freeText                  String?
+  annotations               String   @default("[]")
   // [{startOffset, endOffset, selectedText, comment}]
-  revisionInstructions      Json?
+  revisionInstructions      String?
   // {section, whatToChange, why}
   createdAt                 DateTime @default(now())
 
@@ -319,15 +263,15 @@ model ReviewFeedback {
 
 model ImprovementProposal {
   id                       String            @id @default(cuid())
-  type                     ProposalType
-  contentObjectType        ContentObjectType
-  status                   ProposalStatus    @default(PENDING)
+  type                     String
+  contentObjectType        String
+  status                   String            @default("PENDING")
   triggeredByDimension     String?
-  suggestions              Json              @default("[]")
+  suggestions              String            @default("[]")
   // [{field, currentValue, suggestedValue, rationale, evidence}]
-  triggeredByFeedbackIds   Json              @default("[]")
+  triggeredByFeedbackIds   String            @default("[]")
   // string[]
-  adminNotes               String?           @db.Text
+  adminNotes               String?
   resolvedAt               DateTime?
   createdAt                DateTime          @default(now())
 
@@ -345,7 +289,7 @@ model ExportLog {
   format    String
   // docx | pdf | zip
   version   Int?
-  s3Key     String?
+  storagePath String?
   createdAt DateTime @default(now())
 
   run    GenerationRun?  @relation(fields: [runId], references: [id])
@@ -364,7 +308,7 @@ model AuditLog {
   entityId   String
   action     String
   userId     String
-  metadata   Json     @default("{}")
+  metadata   String   @default("{}")
   createdAt  DateTime @default(now())
 
   user User @relation("PerformedBy", fields: [userId], references: [id])
@@ -391,5 +335,5 @@ model Notification {
 model SystemConfig {
   id    String @id @default(cuid())
   key   String @unique
-  value Json
+  value String
 }

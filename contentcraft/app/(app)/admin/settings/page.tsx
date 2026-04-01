@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { parseJsonField } from '@/lib/utils/json'
 import SettingsForm from './SettingsForm'
 
 const DEFAULTS = {
@@ -12,7 +13,9 @@ export default async function SettingsPage() {
   await requireRole('ADMIN')
 
   const configs = await prisma.systemConfig.findMany()
-  const current = Object.fromEntries(configs.map((c) => [c.key, (c.value as { value: unknown }).value ?? c.value]))
+  const current = Object.fromEntries(
+    configs.map((c) => [c.key, parseJsonField<{ value?: unknown }>(c.value, {}).value ?? c.value])
+  )
 
   const settings = { ...DEFAULTS, ...current }
 

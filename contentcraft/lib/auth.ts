@@ -3,7 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@auth/prisma-adapter'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db/client'
-import type { UserRole } from '@prisma/client'
+import type { UserRole } from '@/lib/domain/types'
 
 declare module 'next-auth' {
   interface Session {
@@ -50,7 +50,7 @@ export const authOptions: NextAuthOptions = {
         const valid = await bcrypt.compare(credentials.password, user.password)
         if (!valid) return null
 
-        return { id: user.id, email: user.email, name: user.name, role: user.role }
+        return { id: user.id, email: user.email, name: user.name, role: user.role as UserRole }
       },
     }),
   ],

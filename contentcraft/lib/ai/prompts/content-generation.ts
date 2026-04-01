@@ -1,4 +1,4 @@
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
 
 export interface GenerationContext {
   researchBrief: Record<string, unknown>

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const CreateUserSchema = z.object({
   name: z.string().min(1),
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
       data: {
         entityType: 'User', entityId: user.id,
         action: 'CREATED', userId: session.user.id,
-        metadata: { role: data.role, email: data.email },
+        metadata: stringifyJsonField({ role: data.role, email: data.email }),
       },
     })
 

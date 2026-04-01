@@ -1,4 +1,5 @@
 import type { GeneratedScript } from '@prisma/client'
+import { parseJsonField } from '@/lib/utils/json'
 
 export async function exportScriptAsPdf(script: GeneratedScript): Promise<Buffer> {
   const puppeteer = await import('puppeteer')
@@ -7,7 +8,7 @@ export async function exportScriptAsPdf(script: GeneratedScript): Promise<Buffer
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
 
-  const meta = script.generationMetadata as Record<string, unknown>
+  const meta = parseJsonField<Record<string, unknown>>(script.generationMetadata, {})
 
   try {
     const page = await browser.newPage()

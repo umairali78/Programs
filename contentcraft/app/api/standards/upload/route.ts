@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import { uploadToS3, standardsS3Key } from '@/lib/storage/s3'
+import { saveUploadedFile, standardsStoragePath } from '@/lib/storage/local'
 import { standardsEmbedQueue } from '@/lib/queue'
 import { randomUUID } from 'crypto'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 // POST /api/standards/upload — upload a new standards guide version
 export async function POST(req: NextRequest) {
@@ -22,16 +23,16 @@ export async function POST(req: NextRequest) {
     const nextVersion = (latest?.version ?? 0) + 1
 
     const guideId = randomUUID()
-    const s3Key = standardsS3Key(guideId, ext)
+    const storagePath = standardsStoragePath(guideId, ext)
     const buffer = Buffer.from(await file.arrayBuffer())
-    await uploadToS3(s3Key, buffer, file.type || 'application/octet-stream')
+    await saveUploadedFile(storagePath, buffer)
 
     const guide = await prisma.standardsGuide.create({
       data: {
         id: guideId,
         version: nextVersion,
         isActive: false,
-        s3Key,
+        storagePath,
         fileName: file.name,
         uploadedById: session.user.id,
       },
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     // Enqueue embedding job
     await standardsEmbedQueue.add(`embed-${guide.id}`, {
       standardsGuideId: guide.id,
-      s3Key,
+      storagePath,
     })
 
     await prisma.auditLog.create({
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
         entityId: guide.id,
         action: 'UPLOADED',
         userId: session.user.id,
-        metadata: { version: nextVersion, fileName: file.name },
+        metadata: stringifyJsonField({ version: nextVersion, fileName: file.name }),
       },
     })
 

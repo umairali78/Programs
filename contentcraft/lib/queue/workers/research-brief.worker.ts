@@ -8,6 +8,7 @@ import {
   ResearchBriefSchema,
 } from '@/lib/ai/prompts/research-brief'
 import { findRelevantStandardsChunks } from '@/lib/db/standards'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 export function startResearchBriefWorker() {
   const worker = new Worker<ResearchBriefJobData>(
@@ -20,7 +21,7 @@ export function startResearchBriefWorker() {
         data: { status: 'generating' },
       })
 
-      // Retrieve relevant standards chunks via pgvector similarity
+      // Retrieve relevant standards chunks using the configured embedding strategy
       const chunks = await findRelevantStandardsChunks(sloText, { grade, subject, limit: 8 })
       const chunkTexts = chunks.map((c) => c.content)
 
@@ -35,10 +36,10 @@ export function startResearchBriefWorker() {
         where: { id: briefId },
         data: {
           coreConcept: briefData.coreConcept,
-          prerequisites: briefData.prerequisites,
-          keyVocabulary: briefData.keyVocabulary,
-          pakistanExamples: briefData.pakistanExamples,
-          commonMisconceptions: briefData.commonMisconceptions,
+          prerequisites: stringifyJsonField(briefData.prerequisites),
+          keyVocabulary: stringifyJsonField(briefData.keyVocabulary),
+          pakistanExamples: stringifyJsonField(briefData.pakistanExamples),
+          commonMisconceptions: stringifyJsonField(briefData.commonMisconceptions),
           bloomsLevel: briefData.bloomsLevel,
           pedagogicalNotes: briefData.pedagogicalNotes,
           status: 'draft',

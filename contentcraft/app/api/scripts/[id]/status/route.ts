@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 const StatusSchema = z.object({
   status: z.enum(['IN_REVIEW', 'REVISION_REQUESTED', 'APPROVED']),
@@ -32,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         entityId: params.id,
         action: `STATUS_CHANGED_TO_${status}`,
         userId: session.user.id,
-        metadata: { previousStatus: script.reviewStatus, revisionInstructions },
+        metadata: stringifyJsonField({ previousStatus: script.reviewStatus, revisionInstructions }),
       },
     })
 

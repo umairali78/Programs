@@ -3,7 +3,8 @@ import { createRedisConnection, QUEUE_IMPROVEMENT_PROPOSAL, type ImprovementProp
 import { prisma } from '@/lib/db/client'
 import { ai } from '@/lib/ai/client'
 import { buildImprovementProposalPrompt } from '@/lib/ai/prompts/content-generation'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { parseJsonField, stringifyJsonField } from '@/lib/utils/json'
 import { z } from 'zod'
 
 const ProposalSchema = z.object({
@@ -34,7 +35,7 @@ export function startImprovementProposalWorker() {
         engagementQuality: f.engagementQuality,
         pakistanContextAccuracy: f.pakistanContextAccuracy,
         freeText: f.freeText,
-        annotations: f.annotations,
+        annotations: parseJsonField(f.annotations, []),
       }))
 
       // Load current active prompt library and template
@@ -49,7 +50,7 @@ export function startImprovementProposalWorker() {
         coType as ContentObjectType,
         feedbackSummary,
         promptLib as unknown as Record<string, unknown> ?? {},
-        (template?.parsedSchema as Record<string, unknown>) ?? {}
+        template?.parsedSchema ? parseJsonField<Record<string, unknown>>(template.parsedSchema, {}) : {}
       )
 
       const result = await ai.completeStructured(prompt, 'Generate improvement proposals now.', ProposalSchema, {
@@ -62,8 +63,8 @@ export function startImprovementProposalWorker() {
           contentObjectType: coType as ContentObjectType,
           status: 'PENDING',
           triggeredByDimension,
-          suggestions: result.suggestions,
-          triggeredByFeedbackIds: feedbackIds,
+          suggestions: stringifyJsonField(result.suggestions),
+          triggeredByFeedbackIds: stringifyJsonField(feedbackIds),
         },
       })
 

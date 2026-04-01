@@ -2,7 +2,8 @@ import { Worker, Job } from 'bullmq'
 import { createRedisConnection, QUEUE_STANDARDS_EMBED, type StandardsEmbedJobData } from '../index'
 import { prisma } from '@/lib/db/client'
 import { ai } from '@/lib/ai/client'
-import { downloadFromS3 } from '@/lib/storage/s3'
+import { readStoredFile } from '@/lib/storage/local'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 // Chunk text into ~500-token segments (approx 400 words)
 function chunkText(text: string, maxWords = 400): string[] {
@@ -27,10 +28,9 @@ export function startStandardsEmbedWorker() {
   const worker = new Worker<StandardsEmbedJobData>(
     QUEUE_STANDARDS_EMBED,
     async (job: Job<StandardsEmbedJobData>) => {
-      const { standardsGuideId, s3Key } = job.data
+      const { standardsGuideId, storagePath } = job.data
 
-      // Download and extract text
-      const fileBuffer = await downloadFromS3(s3Key)
+      const fileBuffer = await readStoredFile(storagePath)
       const guide = await prisma.standardsGuide.findUnique({ where: { id: standardsGuideId } })
       if (!guide) throw new Error(`Standards guide ${standardsGuideId} not found`)
 
@@ -54,12 +54,15 @@ export function startStandardsEmbedWorker() {
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i]
         const embedding = await ai.embed(chunk)
-
-        // Use raw SQL to insert vector (Prisma doesn't support vector type natively)
-        await prisma.$executeRaw`
-          INSERT INTO "StandardsChunk" ("id", "standardsGuideId", "content", "embedding", "chunkIndex", "tags")
-          VALUES (${crypto.randomUUID()}, ${standardsGuideId}, ${chunk}, ${`[${embedding.join(',')}]`}::vector, ${i}, '{}')
-        `
+        await prisma.standardsChunk.create({
+          data: {
+            standardsGuideId,
+            content: chunk,
+            embedding: stringifyJsonField(embedding),
+            chunkIndex: i,
+            tags: stringifyJsonField({}),
+          },
+        })
 
         // Progress update every 10 chunks
         if (i % 10 === 0) {

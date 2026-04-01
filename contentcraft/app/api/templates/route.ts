@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import { uploadToS3, templateS3Key } from '@/lib/storage/s3'
+import { saveUploadedFile, templateStoragePath } from '@/lib/storage/local'
 import { templateParseQueue } from '@/lib/queue'
 import { randomUUID } from 'crypto'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { stringifyJsonField } from '@/lib/utils/json'
 
 // POST /api/templates — upload a new template file
 export async function POST(req: NextRequest) {
@@ -36,11 +36,11 @@ export async function POST(req: NextRequest) {
     })
     const nextVersion = (latestTemplate?.version ?? 0) + 1
 
-    // Upload to S3
+    // Save the file locally
     const fileId = randomUUID()
-    const s3Key = templateS3Key(coType, fileId, ext)
+    const storagePath = templateStoragePath(coType, fileId, ext)
     const buffer = Buffer.from(await file.arrayBuffer())
-    await uploadToS3(s3Key, buffer, file.type || 'application/octet-stream')
+    await saveUploadedFile(storagePath, buffer)
 
     // Deactivate previous active template
     await prisma.contentTemplate.updateMany({
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         contentObjectType: coType,
         version: nextVersion,
         isActive: false, // not active until parse is confirmed
-        s3Key,
+        storagePath,
         fileName: file.name,
         parseStatus: 'pending',
         uploadedById: session.user.id,
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     // Enqueue parsing job
     await templateParseQueue.add(`parse-${template.id}`, {
       templateId: template.id,
-      s3Key,
+      storagePath,
       fileName: file.name,
     })
 
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         entityId: template.id,
         action: 'UPLOADED',
         userId: session.user.id,
-        metadata: { coType, version: nextVersion, fileName: file.name },
+        metadata: stringifyJsonField({ coType, version: nextVersion, fileName: file.name }),
       },
     })
 

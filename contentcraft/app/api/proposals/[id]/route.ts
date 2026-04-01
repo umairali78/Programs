@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import type { ContentObjectType } from '@prisma/client'
+import type { ContentObjectType } from '@/lib/domain/types'
+import { parseJsonField, stringifyJsonField } from '@/lib/utils/json'
 
 const ResolveSchema = z.object({
   status: z.enum(['ACCEPTED', 'REJECTED']),
@@ -30,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     // If accepted, apply accepted suggestions to prompt library
     if (status === 'ACCEPTED' && proposal.type === 'PROMPT' && acceptedIndices?.length) {
-      const suggestions = (proposal.suggestions as { field: string; suggestedValue: string }[]) ?? []
+      const suggestions = parseJsonField<{ field: string; suggestedValue: string }[]>(proposal.suggestions, [])
       const toApply = acceptedIndices.map((i) => suggestions[i]).filter(Boolean)
 
       const currentPrompt = await prisma.promptLibrary.findFirst({
@@ -68,7 +69,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         entityId: params.id,
         action: `PROPOSAL_${status}`,
         userId: session.user.id,
-        metadata: { adminNotes, acceptedIndices },
+        metadata: stringifyJsonField({ adminNotes, acceptedIndices }),
       },
     })
 
