@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq'
-import { createRedisConnection, QUEUE_CONTENT_GENERATION, complianceCheckQueue, type ContentGenerationJobData } from '../index'
+import { createRedisConnection, QUEUE_CONTENT_GENERATION, type ContentGenerationJobData } from '../index'
 import { prisma } from '@/lib/db/client'
 import { ai } from '@/lib/ai/client'
 import {
@@ -28,7 +28,7 @@ export function startContentGenerationWorker() {
 
       await prisma.generatedScript.update({
         where: { id: scriptId },
-        data: { generationMetadata: { ...((await prisma.generatedScript.findUnique({ where: { id: scriptId }, select: { generationMetadata: true } }))?.generationMetadata as object ?? {}), status: 'generating' } },
+        data: { generationMetadata: { status: 'generating' } },
       })
 
       // Load research brief
@@ -105,8 +105,8 @@ export function startContentGenerationWorker() {
         where: { id: scriptId },
         data: {
           scriptText,
-          complianceSummary,
-          generationMetadata: metadata,
+          complianceSummary: complianceSummary as object[],
+          generationMetadata: metadata as object,
           templateId: template?.id,
         },
       })

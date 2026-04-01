@@ -14,41 +14,76 @@ export async function findRelevantStandardsChunks(
   query: string,
   options: FindChunksOptions = {}
 ): Promise<{ id: string; content: string; tags: unknown }[]> {
-  const { limit = 8, grade, subject, coType, activeOnly = true } = options
+  const { limit = 8, grade, coType, activeOnly = true } = options
 
   let embedding: number[]
   try {
     embedding = await ai.embed(query)
   } catch {
-    // If embedding fails (e.g. dev mode), return first N chunks from active guide
-    const fallback = await prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
+    // Dev fallback: return first N chunks from active guide (no vector search)
+    return prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
       SELECT sc.id, sc.content, sc.tags
       FROM "StandardsChunk" sc
       JOIN "StandardsGuide" sg ON sc."standardsGuideId" = sg.id
       WHERE sg."isActive" = true
       LIMIT ${limit}
     `
-    return fallback
   }
 
-  // Build tag filter condition
+  const vectorLiteral = `[${embedding.join(',')}]`
   const gradeBand = grade ? getGradeBand(grade) : null
 
-  // Vector similarity search — cosine distance
-  // Filter by active guide and optional tags (JSON containment)
-  const results = await prisma.$queryRaw<{ id: string; content: string; tags: unknown; similarity: number }[]>`
+  // Build query based on optional filters. We use separate queries to avoid
+  // dynamic interpolation inside tagged template literals (Prisma limitation).
+  if (gradeBand && coType) {
+    return prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
+      SELECT sc.id, sc.content, sc.tags,
+             1 - (sc.embedding <=> ${vectorLiteral}::vector) AS similarity
+      FROM "StandardsChunk" sc
+      JOIN "StandardsGuide" sg ON sc."standardsGuideId" = sg.id
+      WHERE (${activeOnly} = false OR sg."isActive" = true)
+        AND (sc.tags->'gradeBands' IS NULL OR sc.tags->'gradeBands' @> ${JSON.stringify([gradeBand])}::jsonb)
+        AND (sc.tags->'contentObjectTypes' IS NULL OR sc.tags->'contentObjectTypes' @> ${JSON.stringify([coType])}::jsonb)
+      ORDER BY sc.embedding <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `
+  }
+
+  if (gradeBand) {
+    return prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
+      SELECT sc.id, sc.content, sc.tags,
+             1 - (sc.embedding <=> ${vectorLiteral}::vector) AS similarity
+      FROM "StandardsChunk" sc
+      JOIN "StandardsGuide" sg ON sc."standardsGuideId" = sg.id
+      WHERE (${activeOnly} = false OR sg."isActive" = true)
+        AND (sc.tags->'gradeBands' IS NULL OR sc.tags->'gradeBands' @> ${JSON.stringify([gradeBand])}::jsonb)
+      ORDER BY sc.embedding <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `
+  }
+
+  if (coType) {
+    return prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
+      SELECT sc.id, sc.content, sc.tags,
+             1 - (sc.embedding <=> ${vectorLiteral}::vector) AS similarity
+      FROM "StandardsChunk" sc
+      JOIN "StandardsGuide" sg ON sc."standardsGuideId" = sg.id
+      WHERE (${activeOnly} = false OR sg."isActive" = true)
+        AND (sc.tags->'contentObjectTypes' IS NULL OR sc.tags->'contentObjectTypes' @> ${JSON.stringify([coType])}::jsonb)
+      ORDER BY sc.embedding <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `
+  }
+
+  return prisma.$queryRaw<{ id: string; content: string; tags: unknown }[]>`
     SELECT sc.id, sc.content, sc.tags,
-           1 - (sc.embedding <=> ${`[${embedding.join(',')}]`}::vector) AS similarity
+           1 - (sc.embedding <=> ${vectorLiteral}::vector) AS similarity
     FROM "StandardsChunk" sc
     JOIN "StandardsGuide" sg ON sc."standardsGuideId" = sg.id
-    WHERE ${activeOnly ? prisma.$raw`sg."isActive" = true` : prisma.$raw`true`}
-    ${gradeBand ? prisma.$raw`AND (sc.tags->'gradeBands' IS NULL OR sc.tags->'gradeBands' @> ${JSON.stringify([gradeBand])}::jsonb)` : prisma.$raw``}
-    ${coType ? prisma.$raw`AND (sc.tags->'contentObjectTypes' IS NULL OR sc.tags->'contentObjectTypes' @> ${JSON.stringify([coType])}::jsonb)` : prisma.$raw``}
-    ORDER BY sc.embedding <=> ${`[${embedding.join(',')}]`}::vector
+    WHERE (${activeOnly} = false OR sg."isActive" = true)
+    ORDER BY sc.embedding <=> ${vectorLiteral}::vector
     LIMIT ${limit}
   `
-
-  return results
 }
 
 export async function getActiveStandardsVersion(): Promise<number | null> {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { CheckCircle, RefreshCw, ChevronRight, Edit3 } from 'lucide-react'
+import { CheckCircle, RefreshCw } from 'lucide-react'
 
 interface VocabItem { term: string; definition: string; gradeAppropriateExample: string }
 
@@ -30,12 +30,10 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
   const [brief, setBrief] = useState<Brief | null>(null)
   const [loading, setLoading] = useState(true)
   const [approving, setApproving] = useState(false)
-  const [regenerating, setregenerating] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   const [focusInstruction, setFocusInstruction] = useState('')
   const [userNotes, setUserNotes] = useState('')
-  const [pollCount, setPollCount] = useState(0)
 
-  // Poll for brief completion
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
 
@@ -46,16 +44,9 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
           const data: Brief = await res.json()
           setBrief(data)
           setLoading(false)
-
-          if (data.status === 'draft' || data.status === 'approved') {
-            // Brief is ready, stop polling
-            return
-          }
+          if (data.status === 'draft' || data.status === 'approved') return
         }
       } catch {}
-
-      // Keep polling if still generating
-      setPollCount((c) => c + 1)
       timer = setTimeout(poll, 2000)
     }
 
@@ -96,12 +87,10 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setBrief(null)
-      setLoading(true)
-      setFocusInstruction('')
+      // Navigate to new brief
+      router.push(`/generate/brief/${data.briefId}?selectedCOs=${selectedCOs.join(',')}`)
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Regeneration failed')
-    } finally {
       setRegenerating(false)
     }
   }
@@ -113,7 +102,7 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
           <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="font-semibold text-gray-700">Generating Research Brief...</p>
           <p className="text-sm text-gray-400 mt-2">
-            Analyzing the SLO, calibrating for Grade {brief?.grade ?? '?'}, and anchoring Pakistan context.
+            Analyzing the SLO, calibrating for Grade {brief?.grade ?? '?'}, anchoring Pakistan context.
           </p>
         </div>
       </div>
@@ -133,9 +122,9 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
       <div className="card p-5">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">SLO</p>
         <p className="text-sm text-gray-800 leading-relaxed">{brief.sloText}</p>
-        <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
-          <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full font-medium">
-            Bloom's: {brief.bloomsLevel ?? 'Unknown'}
+        <div className="mt-3">
+          <span className="px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full text-xs font-medium">
+            Bloom&apos;s: {brief.bloomsLevel ?? 'Unknown'}
           </span>
         </div>
       </div>
@@ -143,7 +132,7 @@ export default function ResearchBriefPage({ params }: { params: { id: string } }
       {/* Core Concept */}
       <div className="card p-5">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Core Concept</p>
-        <p className="text-sm text-gray-800 leading-relaxed">{brief.coreConcept ?? 'Not generated yet.'}</p>
+        <p className="text-sm text-gray-800 leading-relaxed">{brief.coreConcept ?? '—'}</p>
       </div>
 
       {/* Key Vocabulary */}

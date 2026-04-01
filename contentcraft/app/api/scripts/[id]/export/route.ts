@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     })
 
     const filename = `${script.contentObjectType}_v${script.version}.${ext}`
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: {
         'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${filename}"`,
