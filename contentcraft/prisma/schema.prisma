@@ -1,0 +1,395 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  DESIGNER
+  WRITER
+  REVIEWER
+}
+
+enum ContentObjectType {
+  CO1
+  CO2
+  CO3
+  CO4
+  CO5
+  CO6
+  CO7
+}
+
+enum BloomsLevel {
+  REMEMBER
+  UNDERSTAND
+  APPLY
+  ANALYSE
+  EVALUATE
+  CREATE
+}
+
+enum RunStatus {
+  PENDING
+  RESEARCHING
+  GENERATING
+  COMPLETE
+  FAILED
+}
+
+enum ReviewStatus {
+  DRAFT
+  IN_REVIEW
+  REVISION_REQUESTED
+  APPROVED
+}
+
+enum ProposalType {
+  TEMPLATE
+  PROMPT
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// ─── User & Auth ──────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String?   // hashed with bcrypt
+  role          UserRole  @default(DESIGNER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  sessions          Session[]
+  accounts          Account[]
+  uploadedTemplates ContentTemplate[]  @relation("UploadedBy")
+  uploadedStandards StandardsGuide[]   @relation("UploadedBy")
+  generationRuns    GenerationRun[]    @relation("CreatedBy")
+  researchBriefs    ResearchBrief[]    @relation("CreatedBy")
+  reviewFeedback    ReviewFeedback[]   @relation("ReviewedBy")
+  exportLogs        ExportLog[]        @relation("ExportedBy")
+  auditLogs         AuditLog[]         @relation("PerformedBy")
+  promptLibraries   PromptLibrary[]    @relation("UpdatedBy")
+  assignedScripts   GeneratedScript[]  @relation("AssignedReviewer")
+  notifications     Notification[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Standards & Templates ───────────────────────────────────────────────────
+
+model StandardsGuide {
+  id          String   @id @default(cuid())
+  version     Int
+  isActive    Boolean  @default(false)
+  s3Key       String
+  fileName    String
+  uploadedById String
+  uploadedAt  DateTime @default(now())
+
+  uploadedBy  User              @relation("UploadedBy", fields: [uploadedById], references: [id])
+  chunks      StandardsChunk[]
+  runs        GenerationRun[]
+
+  @@unique([version])
+}
+
+model StandardsChunk {
+  id              String                       @id @default(cuid())
+  standardsGuideId String
+  content         String                       @db.Text
+  embedding       Unsupported("vector(1536)")?
+  chunkIndex      Int
+  tags            Json                         @default("{}")
+  // tags shape: { contentObjectTypes: string[], gradeBands: string[], subjects: string[] }
+
+  guide StandardsGuide @relation(fields: [standardsGuideId], references: [id], onDelete: Cascade)
+
+  @@index([standardsGuideId])
+}
+
+model ContentTemplate {
+  id                String            @id @default(cuid())
+  contentObjectType ContentObjectType
+  version           Int
+  isActive          Boolean           @default(false)
+  s3Key             String
+  fileName          String
+  parsedSchema      Json?
+  // parsedSchema shape: { sections: [{name, order, targetWordCount}], toneMarkers: string[], formatSignals: string[], wordCountTargets: Record<string, number> }
+  parseStatus       String            @default("pending")
+  // pending | parsing | parsed | failed
+  uploadedById      String
+  uploadedAt        DateTime          @default(now())
+  improvementProposals Json           @default("[]")
+
+  uploadedBy          User                  @relation("UploadedBy", fields: [uploadedById], references: [id])
+  generationScripts   GeneratedScript[]
+
+  @@unique([contentObjectType, version])
+}
+
+model PromptLibrary {
+  id                String            @id @default(cuid())
+  contentObjectType ContentObjectType
+  version           Int
+  isActive          Boolean           @default(false)
+  masterPrompt      String            @db.Text
+  structuralRules   String            @db.Text
+  outputFormat      String            @db.Text
+  qualityCriteria   String            @db.Text
+  updatedById       String
+  updatedAt         DateTime          @default(now())
+
+  updatedBy User @relation("UpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([contentObjectType, version])
+}
+
+// ─── SLO Library ─────────────────────────────────────────────────────────────
+
+model SLORecord {
+  id                String   @id @default(cuid())
+  sloText           String   @db.Text
+  grade             Int
+  subject           String
+  curriculumContext String   @default("Pakistan NC")
+  topicCluster      String?
+  createdAt         DateTime @default(now())
+
+  @@index([grade, subject])
+}
+
+// ─── Generation Pipeline ─────────────────────────────────────────────────────
+
+model ResearchBrief {
+  id                  String      @id @default(cuid())
+  sloText             String      @db.Text
+  grade               Int
+  subject             String
+  curriculumContext   String      @default("Pakistan NC")
+  version             Int         @default(1)
+  coreConcept         String?     @db.Text
+  prerequisites       Json        @default("[]")
+  keyVocabulary       Json        @default("[]")
+  // [{term, definition, gradeAppropriateExample}]
+  pakistanExamples    Json        @default("[]")
+  commonMisconceptions Json       @default("[]")
+  bloomsLevel         BloomsLevel?
+  pedagogicalNotes    String?     @db.Text
+  editedByUser        Boolean     @default(false)
+  userNotes           String?     @db.Text
+  status              String      @default("draft")
+  // draft | approved
+  regenerationFocus   String?     @db.Text
+  createdById         String
+  createdAt           DateTime    @default(now())
+
+  createdBy      User            @relation("CreatedBy", fields: [createdById], references: [id])
+  generationRuns GenerationRun[]
+
+  @@index([sloText, grade, subject])
+}
+
+model GenerationRun {
+  id                   String     @id @default(cuid())
+  researchBriefId      String
+  status               RunStatus  @default(PENDING)
+  selectedCOs          Json
+  // ContentObjectType[]
+  templateVersionsUsed Json       @default("{}")
+  // Record<ContentObjectType, number>
+  standardsVersionUsed Int?
+  standardsGuideId     String?
+  createdById          String
+  createdAt            DateTime   @default(now())
+  completedAt          DateTime?
+
+  researchBrief   ResearchBrief     @relation(fields: [researchBriefId], references: [id])
+  createdBy       User              @relation("CreatedBy", fields: [createdById], references: [id])
+  standardsGuide  StandardsGuide?   @relation(fields: [standardsGuideId], references: [id])
+  generatedScripts GeneratedScript[]
+  exportLogs      ExportLog[]
+
+  @@index([createdById])
+  @@index([status])
+}
+
+model GeneratedScript {
+  id                      String            @id @default(cuid())
+  runId                   String
+  contentObjectType       ContentObjectType
+  version                 Int               @default(1)
+  scriptText              String            @db.Text
+  complianceSummary       Json              @default("[]")
+  // [{criterion, status: 'pass'|'flag', note}]
+  regenerationInstruction String?           @db.Text
+  reviewStatus            ReviewStatus      @default(DRAFT)
+  assignedReviewerId      String?
+  templateId              String?
+  generationMetadata      Json              @default("{}")
+  // { sloText, grade, subject, curriculumContext, templateVersion, standardsVersion, briefVersion, modelId }
+  createdAt               DateTime          @default(now())
+
+  run              GenerationRun    @relation(fields: [runId], references: [id])
+  assignedReviewer User?            @relation("AssignedReviewer", fields: [assignedReviewerId], references: [id])
+  template         ContentTemplate? @relation(fields: [templateId], references: [id])
+  reviewFeedback   ReviewFeedback[]
+  exportLogs       ExportLog[]
+
+  @@index([runId])
+  @@index([reviewStatus])
+  @@index([contentObjectType])
+}
+
+// ─── Review & Feedback ───────────────────────────────────────────────────────
+
+model ReviewFeedback {
+  id                        String   @id @default(cuid())
+  scriptId                  String
+  reviewerId                String
+  standardsCompliance       Int      // 1-5
+  gradeAppropriateness      Int      // 1-5
+  templateAdherence         Int      // 1-5
+  engagementQuality         Int      // 1-5
+  pakistanContextAccuracy   Int      // 1-5
+  freeText                  String?  @db.Text
+  annotations               Json     @default("[]")
+  // [{startOffset, endOffset, selectedText, comment}]
+  revisionInstructions      Json?
+  // {section, whatToChange, why}
+  createdAt                 DateTime @default(now())
+
+  script   GeneratedScript @relation(fields: [scriptId], references: [id])
+  reviewer User            @relation("ReviewedBy", fields: [reviewerId], references: [id])
+
+  @@index([scriptId])
+  @@index([reviewerId])
+}
+
+// ─── Improvement Proposals ───────────────────────────────────────────────────
+
+model ImprovementProposal {
+  id                       String            @id @default(cuid())
+  type                     ProposalType
+  contentObjectType        ContentObjectType
+  status                   ProposalStatus    @default(PENDING)
+  triggeredByDimension     String?
+  suggestions              Json              @default("[]")
+  // [{field, currentValue, suggestedValue, rationale, evidence}]
+  triggeredByFeedbackIds   Json              @default("[]")
+  // string[]
+  adminNotes               String?           @db.Text
+  resolvedAt               DateTime?
+  createdAt                DateTime          @default(now())
+
+  @@index([status])
+  @@index([contentObjectType])
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+model ExportLog {
+  id        String   @id @default(cuid())
+  runId     String?
+  scriptId  String?
+  userId    String
+  format    String
+  // docx | pdf | zip
+  version   Int?
+  s3Key     String?
+  createdAt DateTime @default(now())
+
+  run    GenerationRun?  @relation(fields: [runId], references: [id])
+  script GeneratedScript? @relation(fields: [scriptId], references: [id])
+  user   User             @relation("ExportedBy", fields: [userId], references: [id])
+
+  @@index([runId])
+  @@index([userId])
+}
+
+// ─── Audit & Notifications ───────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  userId     String
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  user User @relation("PerformedBy", fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model SystemConfig {
+  id    String @id @default(cuid())
+  key   String @unique
+  value Json
+}
