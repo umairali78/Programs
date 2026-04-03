@@ -33,16 +33,19 @@ abstract class BaseAIService implements AIService {
   ): Promise<T> {
     const enhancedSystem = `${systemPrompt}
 
-IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences.`
+IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, no code fences. Start your response with { and end with }.`
 
     const raw = await this.complete(enhancedSystem, userPrompt, options)
-    const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim()
+
+    // Extract JSON object from anywhere in the response
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    const cleaned = jsonMatch ? jsonMatch[0] : raw.trim()
 
     let parsed: unknown
     try {
       parsed = JSON.parse(cleaned)
     } catch {
-      throw new Error(`AI returned invalid JSON: ${cleaned.slice(0, 200)}`)
+      throw new Error(`AI returned invalid JSON: ${cleaned.slice(0, 300)}`)
     }
 
     return schema.parse(parsed)
@@ -57,13 +60,14 @@ class AnthropicAIService extends BaseAIService {
   private client: Anthropic
   private model: string
 
-  constructor() {
+  constructor(apiKey?: string, model?: string) {
     super()
-    if (!process.env.ANTHROPIC_API_KEY) {
+    const key = apiKey ?? process.env.ANTHROPIC_API_KEY
+    if (!key) {
       throw new Error('ANTHROPIC_API_KEY is required when AI_PROVIDER=anthropic')
     }
-    this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    this.model = process.env.AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL
+    this.client = new Anthropic({ apiKey: key })
+    this.model = model ?? process.env.AI_MODEL ?? DEFAULT_ANTHROPIC_MODEL
   }
 
   async complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string> {
@@ -85,13 +89,14 @@ class OpenAIService extends BaseAIService {
   private apiKey: string
   private model: string
 
-  constructor() {
+  constructor(apiKey?: string, model?: string) {
     super()
-    if (!process.env.OPENAI_API_KEY) {
+    const key = apiKey ?? process.env.OPENAI_API_KEY
+    if (!key) {
       throw new Error('OPENAI_API_KEY is required when AI_PROVIDER=openai')
     }
-    this.apiKey = process.env.OPENAI_API_KEY
-    this.model = process.env.AI_MODEL ?? DEFAULT_OPENAI_MODEL
+    this.apiKey = key
+    this.model = model ?? process.env.AI_MODEL ?? DEFAULT_OPENAI_MODEL
   }
 
   async complete(systemPrompt: string, userPrompt: string, options?: AIOptions): Promise<string> {
@@ -229,3 +234,8 @@ export function getConfiguredAIModel(): string {
 const globalForAI = globalThis as unknown as { ai: AIService | undefined }
 export const ai = globalForAI.ai ?? createAIService()
 if (process.env.NODE_ENV !== 'production') globalForAI.ai = ai
+
+// Returns AI service configured from environment variables (.env)
+export async function getAIServiceFromConfig(): Promise<AIService> {
+  return createAIService()
+}

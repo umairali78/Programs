@@ -1,5 +1,5 @@
 import { prisma } from './client'
-import { improvementProposalQueue } from '@/lib/queue'
+import { processImprovementProposal } from '@/lib/jobs/processImprovementProposal'
 import type { ContentObjectType } from '@/lib/domain/types'
 import { parseJsonField } from '@/lib/utils/json'
 
@@ -72,13 +72,15 @@ export async function checkImprovementTrigger(
       if (existing) continue
 
       const feedbackIds = recentFeedback.map((f) => f.id)
-      await improvementProposalQueue.add(`proposal-${coType}-${dimension}`, {
+      processImprovementProposal({
         coType,
         triggeredByDimension: dimension,
         feedbackIds,
+      }).catch((err) => {
+        console.error(`[FeedbackTrigger] Background proposal generation failed for ${coType}.${dimension}:`, err)
       })
 
-      console.log(`[FeedbackTrigger] Enqueued improvement proposal for ${coType}.${dimension} (avg: ${avg})`)
+      console.log(`[FeedbackTrigger] Started improvement proposal for ${coType}.${dimension} (avg: ${avg})`)
     }
   }
 }

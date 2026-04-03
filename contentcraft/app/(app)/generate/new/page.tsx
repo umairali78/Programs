@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronRight, BookOpen } from 'lucide-react'
+import { ChevronRight, BookOpen, Settings } from 'lucide-react'
+import Link from 'next/link'
 
-const SUBJECTS = [
+const DEFAULT_SUBJECTS = [
   'Mathematics', 'Science', 'English', 'Urdu',
   'Social Studies', 'Islamiat', 'Computer Science', 'Pakistan Studies',
 ]
+
+const DEFAULT_GRADES = Array.from({ length: 12 }, (_, i) => i + 1)
 
 const CONTENT_OBJECTS = [
   { id: 'CO1', label: 'Model Chapter', desc: 'Primary instructional text' },
@@ -28,6 +31,19 @@ export default function NewGenerationPage() {
   const [selectedCOs, setSelectedCOs] = useState<string[]>(CONTENT_OBJECTS.map((co) => co.id))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [subjects, setSubjects] = useState<string[]>(DEFAULT_SUBJECTS)
+  const [grades, setGrades] = useState<number[]>(DEFAULT_GRADES)
+
+  // Load subjects and grades from settings
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.subjects && Array.isArray(data.subjects)) setSubjects(data.subjects)
+        if (data?.grades && Array.isArray(data.grades)) setGrades(data.grades)
+      })
+      .catch(() => {}) // silently fall back to defaults
+  }, [])
 
   const toggleCO = (id: string) => {
     setSelectedCOs((prev) =>
@@ -60,7 +76,6 @@ export default function NewGenerationPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to start generation')
 
-      // Redirect to the brief review page
       router.push(`/generate/brief/${data.briefId}?selectedCOs=${selectedCOs.join(',')}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
@@ -70,11 +85,17 @@ export default function NewGenerationPage() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">New Content Generation</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Enter the SLO and select which content objects to generate.
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">New Content Generation</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Enter the SLO and select which content objects to generate.
+          </p>
+        </div>
+        <Link href="/admin/settings" className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 mt-1">
+          <Settings className="w-3.5 h-3.5" />
+          Manage subjects &amp; grades
+        </Link>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -112,7 +133,7 @@ export default function NewGenerationPage() {
                 required
               >
                 <option value="">Select grade...</option>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
+                {grades.map((g) => (
                   <option key={g} value={g}>Grade {g}</option>
                 ))}
               </select>
@@ -127,7 +148,7 @@ export default function NewGenerationPage() {
                 required
               >
                 <option value="">Select subject...</option>
-                {SUBJECTS.map((s) => (
+                {subjects.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -186,6 +207,9 @@ export default function NewGenerationPage() {
           {selectedCOs.length === 0 && (
             <p className="text-xs text-red-500 mt-2">Select at least one content object.</p>
           )}
+          <p className="text-xs text-gray-400 mt-3">
+            You can also generate individual objects after reviewing the research brief.
+          </p>
         </div>
 
         {error && (

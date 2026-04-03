@@ -16,16 +16,20 @@ export function getGradeBand(grade: number): string {
 
 export const ResearchBriefSchema = z.object({
   coreConcept: z.string(),
-  prerequisites: z.array(z.string()),
+  prerequisites: z.array(z.string()).default([]),
   keyVocabulary: z.array(z.object({
     term: z.string(),
     definition: z.string(),
     gradeAppropriateExample: z.string(),
-  })).min(10).max(15),
-  pakistanExamples: z.array(z.string()).min(3),
-  commonMisconceptions: z.array(z.string()).min(2),
-  bloomsLevel: z.enum(['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYSE', 'EVALUATE', 'CREATE']),
-  pedagogicalNotes: z.string(),
+  })).default([]),
+  pakistanExamples: z.array(z.string()).default([]),
+  commonMisconceptions: z.array(z.string()).default([]),
+  bloomsLevel: z.string().transform((v) =>
+    ['REMEMBER', 'UNDERSTAND', 'APPLY', 'ANALYSE', 'ANALYZE', 'EVALUATE', 'CREATE'].includes(v.toUpperCase())
+      ? v.toUpperCase().replace('ANALYZE', 'ANALYSE')
+      : 'UNDERSTAND'
+  ),
+  pedagogicalNotes: z.string().default(''),
 })
 
 export type ResearchBriefData = z.infer<typeof ResearchBriefSchema>

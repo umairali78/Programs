@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
+import { parseJsonField } from '@/lib/utils/json'
 
 // GET /api/scripts/[id]
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -11,7 +12,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       include: { reviewFeedback: { include: { reviewer: { select: { name: true, email: true } } } } },
     })
     if (!script) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    return NextResponse.json(script)
+    return NextResponse.json({
+      ...script,
+      complianceSummary: parseJsonField(script.complianceSummary, []),
+      generationMetadata: parseJsonField(script.generationMetadata, {}),
+    })
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

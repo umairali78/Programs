@@ -2,15 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import { contentGenerationQueue } from '@/lib/queue'
 import { getActiveStandardsVersion } from '@/lib/db/standards'
 import type { ContentObjectType } from '@/lib/domain/types'
 import { stringifyJsonField } from '@/lib/utils/json'
+import { processContentGeneration } from '@/lib/jobs/processContentGeneration'
 
 const ApproveSchema = z.object({
   briefId: z.string(),
   selectedCOs: z.array(z.string()).min(1),
-  // Optional user edits to the brief fields
   edits: z.object({
     coreConcept: z.string().optional(),
     prerequisites: z.array(z.string()).optional(),
@@ -71,29 +70,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     })
 
-    // Create GeneratedScript placeholders and enqueue jobs
-    const scriptJobs = await Promise.all(
-      selectedCOs.map(async (coType) => {
-        const script = await prisma.generatedScript.create({
-          data: {
-            runId: run.id,
-            contentObjectType: coType,
-            version: 1,
-            scriptText: '',
-            generationMetadata: stringifyJsonField({ status: 'queued' }),
-          },
-        })
-
-        await contentGenerationQueue.add(`gen-${run.id}-${coType}`, {
-          scriptId: script.id,
+    // Create GeneratedScript placeholders and kick off inline background generation
+    const scriptIds: string[] = []
+    for (const coType of selectedCOs) {
+      const script = await prisma.generatedScript.create({
+        data: {
           runId: run.id,
-          coType,
-          briefId,
-        })
-
-        return script.id
+          contentObjectType: coType,
+          version: 1,
+          scriptText: '',
+          generationMetadata: stringifyJsonField({ status: 'queued' }),
+        },
       })
-    )
+      scriptIds.push(script.id)
+
+      // Fire-and-forget: run content generation inline without BullMQ/Redis
+      const jobData = { scriptId: script.id, runId: run.id, coType, briefId }
+      processContentGeneration(jobData).catch((err) => {
+        console.error(`[approve-brief] Background generation failed for ${coType}:`, err)
+      })
+    }
 
     await prisma.auditLog.create({
       data: {
@@ -101,11 +97,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         entityId: run.id,
         action: 'BRIEF_APPROVED_GENERATION_STARTED',
         userId: session.user.id,
-        metadata: stringifyJsonField({ briefId, selectedCOs, scriptCount: scriptJobs.length }),
+        metadata: stringifyJsonField({ briefId, selectedCOs, scriptCount: scriptIds.length }),
       },
     })
 
-    return NextResponse.json({ runId: run.id, scriptIds: scriptJobs, status: 'generating' })
+    return NextResponse.json({ runId: run.id, scriptIds, status: 'generating' })
   } catch (err) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation error', details: err.errors }, { status: 400 })

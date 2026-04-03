@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import { saveUploadedFile, standardsStoragePath } from '@/lib/storage/local'
-import { standardsEmbedQueue } from '@/lib/queue'
+import { processStandardsEmbed } from '@/lib/jobs/processStandardsEmbed'
 import { randomUUID } from 'crypto'
 import { stringifyJsonField } from '@/lib/utils/json'
 
@@ -38,10 +38,11 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Enqueue embedding job
-    await standardsEmbedQueue.add(`embed-${guide.id}`, {
+    processStandardsEmbed({
       standardsGuideId: guide.id,
       storagePath,
+    }).catch((err) => {
+      console.error('[POST /api/standards/upload] Background standards embed failed:', err)
     })
 
     await prisma.auditLog.create({

@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import { contentGenerationQueue } from '@/lib/queue'
 import { stringifyJsonField } from '@/lib/utils/json'
+import { processContentGeneration } from '@/lib/jobs/processContentGeneration'
 
 const RegenerateSchema = z.object({
   instruction: z.string().optional(),
@@ -12,7 +12,7 @@ const RegenerateSchema = z.object({
 // POST /api/scripts/[id]/regenerate
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await requireRole('ADMIN', 'DESIGNER', 'WRITER')
+    await requireRole('ADMIN', 'DESIGNER', 'WRITER')
     const { instruction } = RegenerateSchema.parse(await req.json())
 
     const script = await prisma.generatedScript.findUnique({
@@ -34,15 +34,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     })
 
-    await contentGenerationQueue.add(`regen-${newScript.id}`, {
+    // Fire-and-forget inline generation
+    const jobData = {
       scriptId: newScript.id,
       runId: script.runId,
       coType: script.contentObjectType,
       briefId: script.run.researchBriefId,
       regenerationInstruction: instruction,
+    }
+    processContentGeneration(jobData).catch((err) => {
+      console.error(`[regenerate] Background regeneration failed:`, err)
     })
 
-    return NextResponse.json({ scriptId: newScript.id, version: newScript.version, status: 'queued' })
+    return NextResponse.json({ scriptId: newScript.id, version: newScript.version, status: 'generating' })
   } catch (err) {
     console.error('[POST /api/scripts/[id]/regenerate]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

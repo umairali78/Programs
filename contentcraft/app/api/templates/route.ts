@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
 import { saveUploadedFile, templateStoragePath } from '@/lib/storage/local'
-import { templateParseQueue } from '@/lib/queue'
+import { processTemplateParse } from '@/lib/jobs/processTemplateParse'
 import { randomUUID } from 'crypto'
 import type { ContentObjectType } from '@/lib/domain/types'
 import { stringifyJsonField } from '@/lib/utils/json'
@@ -61,11 +61,12 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Enqueue parsing job
-    await templateParseQueue.add(`parse-${template.id}`, {
+    processTemplateParse({
       templateId: template.id,
       storagePath,
       fileName: file.name,
+    }).catch((err) => {
+      console.error('[POST /api/templates] Background template parse failed:', err)
     })
 
     await prisma.auditLog.create({

@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { getSession, requireRole } from '@/lib/auth'
-import { researchBriefQueue } from '@/lib/queue'
 import { getActiveStandardsVersion } from '@/lib/db/standards'
 import { CONTENT_OBJECT_TYPES, type ContentObjectType } from '@/lib/domain/types'
 import { stringifyJsonField } from '@/lib/utils/json'
+import { processResearchBrief } from '@/lib/jobs/processResearchBrief'
 
 const CO_TYPES: ContentObjectType[] = [...CONTENT_OBJECT_TYPES]
 
@@ -47,13 +47,16 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Enqueue research brief generation
-    await researchBriefQueue.add(`brief-${brief.id}`, {
+    // Process research brief in background (fire-and-forget — no Redis/worker required)
+    const jobData = {
       briefId: brief.id,
       sloText: data.sloText,
       grade: data.grade,
       subject: data.subject,
       curriculumContext: data.curriculumContext,
+    }
+    processResearchBrief(jobData).catch((err) => {
+      console.error('[POST /api/runs] Background research brief failed:', err)
     })
 
     // Log audit

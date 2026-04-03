@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db/client'
 import { requireRole } from '@/lib/auth'
-import { researchBriefQueue } from '@/lib/queue'
+import { processResearchBrief } from '@/lib/jobs/processResearchBrief'
 
 const Schema = z.object({ focusInstruction: z.string().optional() })
 
@@ -29,13 +29,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     })
 
-    await researchBriefQueue.add(`brief-${newBrief.id}`, {
+    // Fire-and-forget inline processing
+    processResearchBrief({
       briefId: newBrief.id,
       sloText: newBrief.sloText,
       grade: newBrief.grade,
       subject: newBrief.subject,
       curriculumContext: newBrief.curriculumContext,
       regenerationFocus: focusInstruction,
+    }).catch((err) => {
+      console.error('[briefs/regenerate] Background regeneration failed:', err)
     })
 
     return NextResponse.json({ briefId: newBrief.id })
