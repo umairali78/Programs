@@ -1,0 +1,109 @@
+{
+  "name": "fkg-mis",
+  "version": "1.0.0",
+  "description": "Fashion Ka Ghar Management Information System",
+  "main": "./out/main/index.js",
+  "author": "ATventure",
+  "license": "MIT",
+  "scripts": {
+    "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node -e \"require('./out/main/db/index.js').initDb()\"",
+    "db:studio": "drizzle-kit studio",
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-checkbox": "^1.3.3",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-label": "^2.1.8",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@radix-ui/react-tooltip": "^1.2.8",
+    "archiver": "^7.0.1",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.4.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "date-fns": "^4.1.0",
+    "drizzle-orm": "^0.30.8",
+    "extract-zip": "^2.0.1",
+    "jsbarcode": "^3.12.3",
+    "lucide-react": "^1.8.0",
+    "papaparse": "^5.4.1",
+    "puppeteer-core": "^24.41.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-hook-form": "^7.72.1",
+    "react-router-dom": "^7.14.1",
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config-prettier": "^2.0.0",
+    "@electron-toolkit/eslint-config-ts": "^2.0.0",
+    "@electron-toolkit/preload": "^3.0.0",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/archiver": "^6.0.2",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/extract-zip": "^2.0.0",
+    "@types/jsbarcode": "^3.11.4",
+    "@types/node": "^20.12.7",
+    "@types/papaparse": "^5.3.14",
+    "@types/react": "^18.3.28",
+    "@types/react-dom": "^18.3.7",
+    "@types/uuid": "^9.0.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.19",
+    "drizzle-kit": "^0.21.1",
+    "electron": "^30.0.2",
+    "electron-builder": "^24.13.3",
+    "electron-rebuild": "^3.2.9",
+    "electron-vite": "^2.1.0",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11"
+  },
+  "build": {
+    "appId": "com.fkg.mis",
+    "productName": "Fashion Ka Ghar MIS",
+    "directories": {
+      "output": "dist-app"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/main/migrations",
+        "to": "migrations"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "resources/icon.icns"
+    },
+    "win": {
+      "icon": "resources/icon.ico"
+    }
+  }
+}
