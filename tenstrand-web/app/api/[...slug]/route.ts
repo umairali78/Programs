@@ -9,6 +9,7 @@ import { SeedService } from '@/lib/services/seed.service'
 import { ClaudeService } from '@/lib/services/claude.service'
 import { CsvImportService } from '@/lib/services/csv-import.service'
 import { InsightsService } from '@/lib/services/insights.service'
+import { ensureDemoDataForHostedDemo } from '@/lib/demo-boot'
 import { ensureDatabaseInitialized } from '@/lib/init-db'
 
 function ok(data: any) {
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   try {
     await ensureDatabaseInitialized()
+    if (channel !== 'admin:clearDemo') {
+      await ensureDemoDataForHostedDemo()
+    }
     return await dispatch(channel, body)
   } catch (e: any) {
     console.error(`[API] ${channel}:`, e)
