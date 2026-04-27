@@ -9,6 +9,7 @@ import { SeedService } from '@/lib/services/seed.service'
 import { ClaudeService } from '@/lib/services/claude.service'
 import { CsvImportService } from '@/lib/services/csv-import.service'
 import { InsightsService } from '@/lib/services/insights.service'
+import { InterestService } from '@/lib/services/interest.service'
 import { ensureDemoDataForHostedDemo } from '@/lib/demo-boot'
 import { ensureDatabaseInitialized } from '@/lib/init-db'
 
@@ -51,6 +52,7 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
   const claudeSvc = new ClaudeService()
   const csvSvc = new CsvImportService()
   const insightsSvc = new InsightsService()
+  const interestSvc = new InterestService()
 
   switch (channel) {
     // ── Partners ──────────────────────────────────────────────────────────────
@@ -181,6 +183,21 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await insightsSvc.getDistrictAnalytics())
     case 'insights:teacherOpportunity':
       return ok(await insightsSvc.getTeacherOpportunitySummary(body.teacherId, body.radiusMiles ?? 30))
+
+    // ── Interests ─────────────────────────────────────────────────────────────
+    case 'interest:express':
+      return ok(await interestSvc.express(body.teacherId, body.programId, body.message))
+    case 'interest:remove':
+      await interestSvc.remove(body.teacherId, body.programId)
+      return ok(null)
+    case 'interest:listForTeacher':
+      return ok(await interestSvc.listForTeacher(body.teacherId))
+    case 'interest:listForProgram':
+      return ok(await interestSvc.listForProgram(body.programId))
+    case 'interest:getSet':
+      return ok(await interestSvc.getInterestSet(body.teacherId))
+    case 'interest:count':
+      return ok(await interestSvc.countForTeacher(body.teacherId))
 
     default:
       return err(`Unknown channel: ${channel}`, 404)

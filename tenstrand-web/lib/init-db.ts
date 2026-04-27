@@ -159,6 +159,16 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS program_interests (
+  id TEXT PRIMARY KEY,
+  teacher_id TEXT NOT NULL REFERENCES teachers(id),
+  program_id TEXT NOT NULL REFERENCES programs(id),
+  message TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  UNIQUE(teacher_id, program_id)
+);
 `
 
 let initPromise: Promise<void> | null = null
