@@ -21,14 +21,10 @@ export default function App() {
 
   useEffect(() => {
     const boot = async () => {
+      // /api/init creates tables + seeds demo in one server-side batch call
       await fetch('/api/init', { method: 'POST' })
-      let settings = await invoke<Record<string, string>>('settings:getAll')
-      const demoLoaded = await invoke<boolean>('admin:isDemoLoaded').catch(() => false)
-      if (!demoLoaded && settings.demo_auto_seed_disabled !== 'true') {
-        await invoke('admin:seedDemo')
-        settings = await invoke<Record<string, string>>('settings:getAll')
-      }
-      setHasClaudeKey(!!(settings.claude_api_key?.trim() || settings.openai_api_key?.trim()))
+      const settings = await invoke<Record<string, string>>('settings:getAll').catch(() => ({} as Record<string, string>))
+      setHasClaudeKey(!!(settings.claude_api_key?.trim()))
       if (settings.active_teacher_id) {
         const teacher = await invoke<any>('teacher:get', { id: settings.active_teacher_id }).catch(() => null)
         if (teacher) setActiveTeacher(teacher)
@@ -41,7 +37,12 @@ export default function App() {
   }, [setActiveTeacher, setHasClaudeKey])
 
   if (!bootReady) {
-    return <div className="h-screen bg-surface flex items-center justify-center text-sm text-gray-500">Preparing demo data...</div>
+    return (
+      <div className="h-screen bg-surface flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-gray-500">Loading Climate Learning Exchange…</p>
+      </div>
+    )
   }
 
   return (

@@ -161,14 +161,16 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `
 
-let initialized = false
+let initPromise: Promise<void> | null = null
 
 export async function ensureDatabaseInitialized() {
-  if (initialized) return
-  const client = getRawClient()
-  const statements = DDL.split(';').map((s) => s.trim()).filter(Boolean)
-  for (const sql of statements) {
-    await client.execute(sql)
+  if (!initPromise) {
+    initPromise = (async () => {
+      const client = getRawClient()
+      const statements = DDL.split(';').map((s) => s.trim()).filter(Boolean)
+      // batch() sends all DDL in one HTTP round-trip to Turso
+      await client.batch(statements, 'write')
+    })()
   }
-  initialized = true
+  await initPromise
 }
