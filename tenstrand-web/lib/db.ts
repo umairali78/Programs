@@ -7,7 +7,8 @@ let _db: ReturnType<typeof drizzle<typeof schema>> | null = null
 
 function getClient() {
   if (_client) return _client
-  const url = process.env.TURSO_DATABASE_URL || 'file:./tenstrand-demo.db'
+  const fallbackUrl = process.env.VERCEL ? 'file:/tmp/tenstrand-demo.db' : 'file:./tenstrand-demo.db'
+  const url = process.env.TURSO_DATABASE_URL || fallbackUrl
   _client = createClient({
     url,
     authToken: process.env.TURSO_AUTH_TOKEN
