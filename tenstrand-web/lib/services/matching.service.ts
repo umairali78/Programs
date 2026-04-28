@@ -59,12 +59,14 @@ export class MatchingService {
 
     const rowsResult = await client.execute({
       sql: `SELECT p.id, p.partner_id, pt.name as partner_name, p.title, p.description,
-              p.cost, p.grade_levels, p.subjects, p.season, p.lat, p.lng, p.max_students
+              p.cost, p.grade_levels, p.subjects, p.season, p.max_students,
+              COALESCE(p.lat, pt.lat) as lat,
+              COALESCE(p.lng, pt.lng) as lng
              FROM programs p
              JOIN partners pt ON pt.id = p.partner_id
              WHERE pt.status = 'active'
-               AND p.lat BETWEEN ? AND ?
-               AND p.lng BETWEEN ? AND ?`,
+               AND COALESCE(p.lat, pt.lat) BETWEEN ? AND ?
+               AND COALESCE(p.lng, pt.lng) BETWEEN ? AND ?`,
       args: [minLat, maxLat, minLng, maxLng]
     })
     const rows = rowsResult.rows as any[]
@@ -163,20 +165,26 @@ export class MatchingService {
 
     const client = getRawClient()
     const result = await client.execute({
-      sql: `SELECT p.*, pt.name as partner_name FROM programs p JOIN partners pt ON pt.id = p.partner_id WHERE p.id = ?`,
+      sql: `SELECT p.*, pt.name as partner_name, COALESCE(p.lat, pt.lat) as eff_lat, COALESCE(p.lng, pt.lng) as eff_lng FROM programs p JOIN partners pt ON pt.id = p.partner_id WHERE p.id = ?`,
       args: [programId]
     })
     const row = result.rows[0] as any
-    if (!row?.lat || !row?.lng) return 0
+    if (!row?.eff_lat || !row?.eff_lng) return 0
 
-    const distMiles = haversineMiles(teacher.lat!, teacher.lng!, row.lat as number, row.lng as number)
+    const distMiles = haversineMiles(teacher.lat!, teacher.lng!, row.eff_lat as number, row.eff_lng as number)
     const geo = Math.max(0, 1 - distMiles / 20)
     return geo
   }
 
   private parseJson(value: string | null | undefined): string[] {
     if (!value) return []
-    try { return JSON.parse(value) } catch { return [] }
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : [String(parsed)]
+    } catch {
+      // plain comma-separated or single value stored without JSON encoding
+      return value.split(',').map((s) => s.trim()).filter(Boolean)
+    }
   }
 
   private overlaps(a: string[], b: string[]): boolean {

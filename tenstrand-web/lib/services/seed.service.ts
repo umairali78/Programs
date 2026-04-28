@@ -138,7 +138,7 @@ export class SeedService {
       const id = newId()
       stmts.push({
         sql: `INSERT OR IGNORE INTO programs (id, partner_id, title, description, grade_levels, subjects, max_students, duration_mins, cost, season, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        args: [id, partnerId, prog.title, prog.description, JSON.stringify(prog.grade_levels ?? []), JSON.stringify(prog.subjects ?? []), prog.max_students ?? null, prog.duration_mins ?? null, prog.cost ?? null, prog.season, now],
+        args: [id, partnerId, prog.title, prog.description, JSON.stringify(prog.grade_levels ?? []), JSON.stringify(prog.subjects ?? []), prog.max_students ?? null, prog.duration_mins ?? null, prog.cost ?? null, prog.season ? JSON.stringify([prog.season]) : null, now],
       })
       programCount++
     }

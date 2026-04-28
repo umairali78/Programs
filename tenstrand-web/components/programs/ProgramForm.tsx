@@ -28,6 +28,16 @@ type FormValues = z.infer<typeof schema>
 interface Standard { code: string; desc?: string; framework: string }
 interface Props { program: any | null; partners: { id: string; name: string }[]; onClose: () => void; onSaved: () => void }
 
+function safeParseArray(val: string | null | undefined): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : [String(parsed)]
+  } catch {
+    return val.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+}
+
 export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
   const hasClaudeKey = useAppStore((s) => s.hasClaudeKey)
   const [standards, setStandards] = useState<Standard[]>(program?.standards?.map((s: any) => ({ code: s.standardCode, desc: s.standardDesc, framework: s.framework })) ?? [])
@@ -39,9 +49,9 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
     defaultValues: {
       partnerId: program?.partnerId ?? (partners[0]?.id ?? ''),
       title: program?.title ?? '', description: program?.description ?? '',
-      gradeLevels: program ? JSON.parse(program.gradeLevels ?? '[]') : [],
-      subjects: program ? JSON.parse(program.subjects ?? '[]') : [],
-      season: program ? JSON.parse(program.season ?? '[]') : [],
+      gradeLevels: safeParseArray(program?.gradeLevels),
+      subjects: safeParseArray(program?.subjects),
+      season: safeParseArray(program?.season),
       maxStudents: program?.maxStudents ?? undefined,
       durationMins: program?.durationMins ?? undefined,
       cost: program?.cost ?? undefined

@@ -1,6 +1,6 @@
 'use client'
 import { NavLink } from 'react-router-dom'
-import { Map, Trees, BookOpen, Users, Settings, BarChart2, MessageSquare, Home, GraduationCap } from 'lucide-react'
+import { Map, Trees, BookOpen, Users, Settings, MessageSquare, Home, GraduationCap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/ui.store'
 
@@ -11,7 +11,6 @@ const navItems = [
   { to: '/programs', label: 'Programs', icon: BookOpen },
   { to: '/teachers', label: 'Teachers', icon: GraduationCap },
   { to: '/copilot', label: 'AI Copilot', icon: MessageSquare },
-  { to: '/district', label: 'District', icon: BarChart2 },
   { to: '/admin', label: 'Admin', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings }
 ]

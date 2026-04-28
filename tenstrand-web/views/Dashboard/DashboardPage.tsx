@@ -6,9 +6,9 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  BookOpen, CheckCircle2, ChevronRight, Compass, GraduationCap,
-  HandHeart, Loader2, Map, School, Send, Sparkles, Star, Trees,
-  X, XCircle,
+  BookOpen, CheckCircle2, ChevronRight, Compass, DollarSign,
+  GraduationCap, HandHeart, Loader2, Map, MapPin, School, Send,
+  Sparkles, Star, Trees, X, XCircle,
 } from 'lucide-react'
 import { Link as RouterLink } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
@@ -19,7 +19,8 @@ import { toast } from 'sonner'
 
 interface Overview { partners: number; programs: number; teachers: number; schools: number; districts: number; activePartners: number; freePrograms: number; geocodedPartners: number }
 interface ChartDatum { subject?: string; grade?: string; type?: string; label?: string; count: number }
-interface MatchResult { programId: string; partnerName: string; title: string; description: string | null; cost: number | null; score: number; distanceMiles: number | null; gradeLevels: string[]; subjects: string[] }
+interface ScoreBreakdown { geo: number; grade: number; subject: number; standards: number; season: number; engagement: number }
+interface MatchResult { programId: string; partnerName: string; title: string; description: string | null; cost: number | null; score: number; distanceMiles: number | null; gradeLevels: string[]; subjects: string[]; season: string[]; scoreBreakdown?: ScoreBreakdown }
 interface TopProgram { id: string; title: string; partner_name: string; bookmark_count: number; engagement_count: number }
 interface CountyCoverage { county: string; partners: number; programs: number }
 interface TeacherOpportunity { matchedPrograms: number; reachableStudents: number; schoolName: string | null; nearbySchools: number }
@@ -100,6 +101,16 @@ function InterestModal({
 }
 
 // ── Match card with interest button ──────────────────────────────────────────
+function ScorePip({ label, value, icon: Icon, color }: { label: string; value: number; icon: any; color: string }) {
+  const pct = Math.round(value * 100)
+  const filled = pct >= 60
+  return (
+    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${filled ? `bg-${color}-50 border-${color}-200 text-${color}-700` : 'bg-gray-50 border-gray-200 text-gray-400'}`} title={`${label}: ${pct}%`}>
+      <Icon className="w-2.5 h-2.5" />{pct}%
+    </div>
+  )
+}
+
 function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
   match: MatchResult
   interested: boolean
@@ -107,6 +118,7 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
   onRemoveInterest: (programId: string) => void
 }) {
   const [removing, setRemoving] = useState(false)
+  const sb = match.scoreBreakdown
 
   const handleRemove = async () => {
     setRemoving(true)
@@ -115,7 +127,8 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
   }
 
   return (
-    <div className={`bg-white rounded-2xl border p-4 flex flex-col gap-3 transition-all ${interested ? 'border-brand/30 ring-1 ring-brand/10' : 'border-app-border hover:border-gray-300'}`}>
+    <div className={`bg-white rounded-2xl border p-4 flex flex-col gap-3 transition-all ${interested ? 'border-brand/40 ring-1 ring-brand/10' : 'border-app-border hover:border-gray-300'}`}>
+      {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide truncate">{match.partnerName}</p>
@@ -124,16 +137,27 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
         <div className="shrink-0 flex flex-col items-end gap-0.5">
           <div className="flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
-            <span className="text-lg font-bold text-gray-900 leading-none">{scoreToPercent(match.score)}%</span>
+            <span className="text-xl font-bold text-gray-900 leading-none">{scoreToPercent(match.score)}%</span>
           </div>
-          <p className="text-[10px] text-gray-400">match</p>
+          <p className="text-[10px] text-gray-400">match score</p>
         </div>
       </div>
 
       {match.description && <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{match.description}</p>}
 
-      <div className="flex flex-wrap gap-1.5">
-        {match.gradeLevels.slice(0, 4).map((g) => (
+      {/* Match criteria pills */}
+      {sb && (
+        <div className="flex flex-wrap gap-1" title="Match criteria breakdown">
+          <ScorePip label="Proximity" value={sb.geo} icon={MapPin} color="green" />
+          <ScorePip label="Grade alignment" value={sb.grade} icon={GraduationCap} color="blue" />
+          <ScorePip label="Subject alignment" value={sb.subject} icon={BookOpen} color="purple" />
+          {sb.season > 0 && <ScorePip label="Season match" value={sb.season} icon={Star} color="amber" />}
+        </div>
+      )}
+
+      {/* Grade + subject tags */}
+      <div className="flex flex-wrap gap-1">
+        {match.gradeLevels.slice(0, 5).map((g) => (
           <span key={g} className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-blue-50 text-blue-700">Gr. {g}</span>
         ))}
         {match.subjects.slice(0, 3).map((s) => (
@@ -141,10 +165,13 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
         ))}
       </div>
 
+      {/* Footer */}
       <div className="flex items-center justify-between pt-1 border-t border-gray-100">
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {match.distanceMiles != null && <span>{formatDistance(match.distanceMiles)}</span>}
-          <span>{formatCost(match.cost)}</span>
+          {match.distanceMiles != null && (
+            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{formatDistance(match.distanceMiles)}</span>
+          )}
+          <span className="flex items-center gap-1"><DollarSign className="w-3 h-3" />{formatCost(match.cost)}</span>
         </div>
         {interested ? (
           <div className="flex items-center gap-1.5">
@@ -154,10 +181,7 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => onExpressInterest(match)}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors"
-          >
+          <button onClick={() => onExpressInterest(match)} className="flex items-center gap-1 px-2.5 py-1.5 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors">
             <HandHeart className="w-3 h-3" />Express Interest
           </button>
         )}
