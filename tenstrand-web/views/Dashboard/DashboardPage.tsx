@@ -8,7 +8,7 @@ import {
 import {
   BookOpen, CheckCircle2, ChevronRight, Compass, GraduationCap,
   HandHeart, Loader2, Map, School, Send, Sparkles, Star, Trees,
-  Users, X, XCircle,
+  X, XCircle,
 } from 'lucide-react'
 import { Link as RouterLink } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
@@ -354,7 +354,6 @@ export function DashboardPage() {
                     <Pill icon={Sparkles} label={`${opportunity?.matchedPrograms ?? matches.length} matched programs`} />
                     <Pill icon={HandHeart} label={`${interests.length} interests expressed`} />
                     <Pill icon={School} label={`${opportunity?.nearbySchools ?? 0} nearby schools`} />
-                    <Pill icon={Users} label={`${(opportunity?.reachableStudents ?? 0).toLocaleString()} reachable students`} />
                   </div>
                 </>
               ) : (
