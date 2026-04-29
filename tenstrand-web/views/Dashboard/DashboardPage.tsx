@@ -6,9 +6,9 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import {
-  BookOpen, CheckCircle2, ChevronRight, Compass, DollarSign,
-  GraduationCap, HandHeart, Loader2, Map, MapPin, School, Send,
-  Sparkles, Star, Trees, X, XCircle,
+  BookOpen, Bookmark, CheckCircle2, ChevronRight, Compass, DollarSign,
+  GraduationCap, HandHeart, Loader2, Map, MapPin, Quote, School, Send,
+  Sparkles, Star, Trees, Users, X, XCircle,
 } from 'lucide-react'
 import { Link as RouterLink } from 'react-router-dom'
 import { TopBar } from '@/components/layout/TopBar'
@@ -26,6 +26,9 @@ interface CountyCoverage { county: string; partners: number; programs: number }
 interface TeacherOpportunity { matchedPrograms: number; reachableStudents: number; schoolName: string | null; nearbySchools: number }
 interface TeacherOption { id: string; name: string; email: string | null; gradeLevels: string | null; subjects: string | null; lat: number | null; lng: number | null }
 interface InterestRow { program_id: string; program_title: string; program_description: string | null; partner_name: string; partner_type: string; grade_levels: string | null; subjects: string | null; cost: number | null; created_at: number; message: string | null }
+interface BookmarkRow { id: string; program_id: string; title: string; description: string | null; grade_levels: string | null; subjects: string | null; cost: number | null; partner_name: string }
+interface PeerRec { id: string; title: string; description: string | null; grade_levels: string | null; subjects: string | null; cost: number | null; partner_name: string; peer_bookmark_count: number }
+interface SpotlightReview { text: string; rating: number; teacher_name: string; grade_levels: string | null; program_title: string; partner_name: string }
 
 const COLORS = ['#1B6B3A', '#2563EB', '#C2410C', '#7C3AED', '#0F766E', '#B91C1C']
 
@@ -241,6 +244,10 @@ export function DashboardPage() {
   const [opportunity, setOpportunity] = useState<TeacherOpportunity | null>(null)
   const [interests, setInterests] = useState<InterestRow[]>([])
   const [interestSet, setInterestSet] = useState<Set<string>>(new Set())
+  const [bookmarks, setBookmarks] = useState<BookmarkRow[]>([])
+  const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
+  const [peerRecs, setPeerRecs] = useState<PeerRec[]>([])
+  const [spotlight, setSpotlight] = useState<SpotlightReview | null>(null)
   const [teachers, setTeachers] = useState<TeacherOption[]>([])
   const [loading, setLoading] = useState(true)
   const [changingTeacher, setChangingTeacher] = useState(false)
@@ -266,7 +273,7 @@ export function DashboardPage() {
       if (!id) { setActiveTeacher(null); return }
       await invoke('teacher:setActive', { id })
       const teacher = await invoke<any>('teacher:get', { id })
-      setOpportunity(null); setMatches([]); setInterests([]); setInterestSet(new Set())
+      setOpportunity(null); setMatches([]); setInterests([]); setInterestSet(new Set()); setBookmarks([]); setBookmarkSet(new Set()); setPeerRecs([])
       setActiveTeacher(teacher)
     } finally {
       setChangingTeacher(false)
@@ -286,40 +293,40 @@ export function DashboardPage() {
       invoke<ChartDatum[]>('insights:partnerTypes'),
       invoke<TopProgram[]>('insights:topPrograms', { limit: 5 }),
       invoke<CountyCoverage[]>('insights:countyCoverage'),
-    ] as const
+      invoke<SpotlightReview | null>('review:spotlight').catch(() => null),
+    ]
 
     const teacherSpecific = teacherId ? [
       invoke<MatchResult[]>('match:listForTeacher', { teacherId, radiusMiles: 25 }),
       invoke<TeacherOpportunity>('insights:teacherOpportunity', { teacherId, radiusMiles: 30 }),
       invoke<InterestRow[]>('interest:listForTeacher', { teacherId }),
-      invoke<{ [key: string]: boolean }>('interest:getSet', { teacherId }),
+      invoke<any>('interest:getSet', { teacherId }),
+      invoke<BookmarkRow[]>('bookmark:listForTeacher', { teacherId }),
+      invoke<string[]>('bookmark:getSet', { teacherId }),
+      invoke<PeerRec[]>('bookmark:peerRecommendations', { teacherId, limit: 3 }),
     ] : [
       Promise.resolve([]),
       Promise.resolve(null),
       Promise.resolve([]),
       Promise.resolve({}),
-    ] as const
+      Promise.resolve([]),
+      Promise.resolve([]),
+      Promise.resolve([]),
+    ]
 
-    Promise.all([...shared, ...teacherSpecific] as [
-      Promise<Overview>,
-      Promise<ChartDatum[]>,
-      Promise<ChartDatum[]>,
-      Promise<ChartDatum[]>,
-      Promise<TopProgram[]>,
-      Promise<CountyCoverage[]>,
-      Promise<MatchResult[]>,
-      Promise<TeacherOpportunity | null>,
-      Promise<InterestRow[]>,
-      Promise<any>,
-    ])
-      .then(([o, s, g, t, top, c, m, opp, ints, iset]) => {
+    Promise.all([...shared, ...teacherSpecific])
+      .then(([o, s, g, t, top, c, spot, m, opp, ints, iset, bmarks, bids, precs]) => {
         if (cancelled) return
-        setOverview(o); setSubjects(s); setGrades(g); setTypes(t)
-        setTopPrograms(top); setCounties(c)
+        setOverview(o as Overview); setSubjects(s as ChartDatum[]); setGrades(g as ChartDatum[]); setTypes(t as ChartDatum[])
+        setTopPrograms(top as TopProgram[]); setCounties(c as CountyCoverage[])
+        setSpotlight(spot as SpotlightReview | null)
         setMatches((m as MatchResult[]).slice(0, 8))
-        setOpportunity(opp)
+        setOpportunity(opp as TeacherOpportunity | null)
         setInterests(ints as InterestRow[])
         setInterestSet(new Set(Array.isArray(iset) ? (iset as string[]) : []))
+        setBookmarks(bmarks as BookmarkRow[])
+        setBookmarkSet(new Set(Array.isArray(bids) ? (bids as string[]) : []))
+        setPeerRecs(precs as PeerRec[])
       })
       .finally(() => { if (!cancelled) setLoading(false) })
 
@@ -337,11 +344,28 @@ export function DashboardPage() {
     setInterestSet(new Set(Array.isArray(iset) ? (iset as string[]) : []))
   }
 
+  const reloadBookmarks = async () => {
+    if (!activeTeacher) return
+    const [bmarks, bids] = await Promise.all([
+      invoke<BookmarkRow[]>('bookmark:listForTeacher', { teacherId: activeTeacher.id }),
+      invoke<string[]>('bookmark:getSet', { teacherId: activeTeacher.id }),
+    ])
+    setBookmarks(bmarks)
+    setBookmarkSet(new Set(Array.isArray(bids) ? (bids as string[]) : []))
+  }
+
   const handleRemoveInterest = async (programId: string) => {
     if (!activeTeacher) return
     await invoke('interest:remove', { teacherId: activeTeacher.id, programId })
     await reloadInterests()
     toast.success('Interest withdrawn.')
+  }
+
+  const handleRemoveBookmark = async (programId: string) => {
+    if (!activeTeacher) return
+    await invoke('bookmark:remove', { teacherId: activeTeacher.id, programId })
+    await reloadBookmarks()
+    toast.success('Removed from saved programs.')
   }
 
   const coverage = useMemo(() => {
@@ -482,6 +506,55 @@ export function DashboardPage() {
               )}
             </section>
 
+            {/* Saved programs (bookmarks) */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900 flex items-center gap-1.5"><Bookmark className="w-4 h-4 text-blue-500" />Saved Programs</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Programs you've bookmarked to revisit later.</p>
+                </div>
+                {bookmarks.length > 0 && <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full">{bookmarks.length}</span>}
+              </div>
+              {loading ? (
+                <div className="space-y-2">{[...Array(2)].map((_, i) => <div key={i} className="h-16 rounded-xl bg-gray-100 animate-pulse" />)}</div>
+              ) : bookmarks.length === 0 ? (
+                <div className="rounded-xl border-2 border-dashed border-gray-200 p-8 text-center">
+                  <Bookmark className="w-7 h-7 mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">No saved programs yet.</p>
+                  <p className="text-xs text-gray-400 mt-1">Use the <span className="font-semibold">bookmark icon</span> on any program to save it here.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {bookmarks.map((b) => <BookmarkItem key={b.id} bookmark={b} onRemove={() => handleRemoveBookmark(b.program_id)} />)}
+                </div>
+              )}
+            </section>
+
+            {/* Peer recommendations */}
+            {peerRecs.length > 0 && (
+              <section>
+                <div className="mb-3">
+                  <h2 className="text-sm font-bold text-gray-900 flex items-center gap-1.5"><Users className="w-4 h-4 text-purple-500" />Programs Teachers Like You Saved</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Based on what teachers with similar interests have bookmarked.</p>
+                </div>
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+                  {peerRecs.map((rec) => (
+                    <div key={rec.id} className="bg-white rounded-xl border border-app-border p-3.5 flex flex-col gap-2">
+                      <div>
+                        <p className="text-[11px] text-gray-400">{rec.partner_name}</p>
+                        <p className="text-sm font-semibold text-gray-900 leading-snug">{rec.title}</p>
+                      </div>
+                      {rec.description && <p className="text-xs text-gray-500 line-clamp-2">{rec.description}</p>}
+                      <div className="flex items-center gap-1 mt-auto">
+                        <Bookmark className="w-3 h-3 text-purple-400" />
+                        <span className="text-[11px] text-purple-600 font-medium">{rec.peer_bookmark_count} peer{rec.peer_bookmark_count !== 1 ? 's' : ''} saved</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div className="border-t border-gray-200" />
           </>
         )}
@@ -495,6 +568,27 @@ export function DashboardPage() {
             <RouterLink to="/settings" className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark transition-colors">
               <GraduationCap className="w-3.5 h-3.5" />Open Settings
             </RouterLink>
+          </div>
+        )}
+
+        {/* ── Spotlight review ─────────────────────────────────────────────── */}
+        {spotlight && (
+          <div className="relative overflow-hidden bg-brand-dark rounded-2xl p-5 text-white">
+            <div className="absolute top-3 right-4 opacity-10"><Quote className="w-20 h-20" /></div>
+            <div className="flex items-center gap-2 mb-3">
+              <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+              <p className="text-xs font-semibold text-white/60 uppercase tracking-wide">Teacher Spotlight</p>
+            </div>
+            <blockquote className="text-sm italic text-white/90 leading-relaxed mb-4 max-w-prose">"{spotlight.text}"</blockquote>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-bold text-white">{spotlight.teacher_name}</p>
+                <p className="text-[11px] text-white/50 mt-0.5">{spotlight.program_title} · {spotlight.partner_name}</p>
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {[...Array(spotlight.rating)].map((_, i) => <Star key={i} className="w-3 h-3 fill-amber-400 text-amber-400" />)}
+              </div>
+            </div>
           </div>
         )}
 
@@ -627,6 +721,38 @@ function ChartPanel({ title, subtitle, className = '', children }: { title: stri
       {subtitle && <p className="text-[11px] text-gray-400 mt-0.5 mb-3">{subtitle}</p>}
       {!subtitle && <div className="mb-3" />}
       {children}
+    </div>
+  )
+}
+
+function BookmarkItem({ bookmark, onRemove }: { bookmark: BookmarkRow; onRemove: () => void }) {
+  const [removing, setRemoving] = useState(false)
+  const grades = parseJsonArray(bookmark.grade_levels)
+  const subjects = parseJsonArray(bookmark.subjects)
+
+  const handleRemove = async () => {
+    setRemoving(true)
+    await onRemove()
+    setRemoving(false)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-app-border p-3.5 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 mt-0.5">
+        <Bookmark className="w-4 h-4 text-blue-500" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-gray-400 truncate">{bookmark.partner_name}</p>
+        <p className="text-sm font-semibold text-gray-900 truncate">{bookmark.title}</p>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {grades.slice(0, 3).map((g) => <span key={g} className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-blue-50 text-blue-700">Gr. {g}</span>)}
+          {subjects.slice(0, 2).map((s) => <span key={s} className="px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-brand-light text-brand">{s}</span>)}
+          {bookmark.cost != null && <span className="text-[10px] text-gray-400">{formatCost(bookmark.cost)}</span>}
+        </div>
+      </div>
+      <button onClick={handleRemove} disabled={removing} className="p-1 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors shrink-0" title="Remove bookmark">
+        {removing ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+      </button>
     </div>
   )
 }

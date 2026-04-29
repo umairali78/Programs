@@ -10,6 +10,8 @@ import { TeachersPage } from '@/views/Teachers/TeachersPage'
 import { AdminPage } from '@/views/Admin/AdminPage'
 import { SettingsPage } from '@/views/Settings/SettingsPage'
 import { CopilotPage } from '@/views/Copilot/CopilotPage'
+import { LessonPlansPage } from '@/views/LessonPlans/LessonPlansPage'
+import { ProspectsPage } from '@/views/Prospects/ProspectsPage'
 import { useAppStore } from '@/store/app.store'
 import { invoke } from '@/lib/api'
 import { Toaster } from 'sonner'
@@ -55,6 +57,8 @@ export default function App() {
             <Route path="/programs" element={<ProgramsPage />} />
             <Route path="/teachers" element={<TeachersPage />} />
             <Route path="/copilot" element={<CopilotPage />} />
+            <Route path="/lesson-plans" element={<LessonPlansPage />} />
+            <Route path="/prospects" element={<ProspectsPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

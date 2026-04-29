@@ -3,6 +3,7 @@ import { SettingsService } from './settings.service'
 import { TeacherService } from './teacher.service'
 import { ProgramService } from './program.service'
 import { MatchingService } from './matching.service'
+import { getRawClient } from '../db'
 
 const MODEL = 'claude-sonnet-4-6'
 const OPENAI_DEFAULT_MODEL = 'gpt-4o-mini'
@@ -159,6 +160,111 @@ export class ClaudeService {
       const raw = responseText.trim()
       const jsonStr = raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'))
       return JSON.parse(jsonStr)
+    } catch { return null }
+  }
+
+  async generateLessonPlan(teacherId: string, programId: string): Promise<string | null> {
+    const teacher = await this.teacherSvc.get(teacherId)
+    const program = await this.programSvc.get(programId)
+    if (!teacher || !program) return null
+
+    const grades = this.parseJson(teacher.gradeLevels)
+    const subjects = this.parseJson(teacher.subjects)
+
+    try {
+      return await this.completeText(
+        `You are an experienced California K-12 educator. Generate structured pre-visit lesson plans that connect outdoor programs to classroom curricula. Use California NGSS and EP&C standards.`,
+        `Generate a pre-visit lesson plan for this outdoor program visit.\n\nTeacher:\n- Grade levels: ${grades.join(', ') || 'Not specified'}\n- Subjects: ${subjects.join(', ') || 'Not specified'}\n\nProgram:\n- Title: ${program.title}\n- Partner: ${(program as any).partnerName || ''}\n- Description: ${program.description || 'No description'}\n- Grade levels: ${this.parseJson(program.gradeLevels).join(', ')}\n- Subjects: ${this.parseJson(program.subjects).join(', ')}\n\nFormat the lesson plan with these sections:\n## Learning Objectives\n## Background Knowledge\n## Pre-Visit Activities (2-3 activities)\n## Vocabulary\n## Standards Connections (NGSS/EP&Cs)\n## Discussion Questions\n\nMake it practical and ready to use. About 400 words.`,
+        1200
+      )
+    } catch { return null }
+  }
+
+  async generateOutreachEmail(prospectId: string): Promise<{ subject: string; body: string } | null> {
+    const client = getRawClient()
+    const prospectResult = await client.execute({
+      sql: `SELECT pp.*,
+              (SELECT COUNT(*) FROM schools s WHERE s.county = pp.county) as nearby_schools,
+              (SELECT COUNT(*) FROM programs p JOIN partners pt ON pt.id = p.partner_id WHERE pt.county = pp.county) as existing_programs
+            FROM partner_prospects pp WHERE pp.id = ?`,
+      args: [prospectId],
+    })
+    const prospect = prospectResult.rows[0] as any
+    if (!prospect) return null
+
+    try {
+      const text = await this.completeText(
+        `You are a partnership outreach specialist for Ten Strands, California's outdoor environmental education network. Write warm, personalized outreach emails to invite community organizations to join the Climate Learning Exchange.`,
+        `Write a personalized outreach email to invite this organization to join the Ten Strands Climate Learning Exchange.\n\nOrganization:\n- Name: ${prospect.name}\n- Type: ${prospect.type || 'Environmental organization'}\n- County: ${prospect.county || 'California'}\n- Notes: ${prospect.notes || 'None'}\n\nContext:\n- Nearby schools in their county: ${prospect.nearby_schools || 'many'}\n- Existing programs in that county: ${prospect.existing_programs || 'few'}\n\nFormat as JSON: {"subject": "Email subject line", "body": "Full email body text (plain text, no HTML)"}\n\nThe email should: mention their specific county/region, highlight teacher demand for programs like theirs, explain benefits of joining (visibility to teachers, free listing, support). Keep under 250 words. Sign off as "The Ten Strands Team".`,
+        800
+      )
+      if (!text) return null
+      const raw = text.trim()
+      const jsonStr = raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'))
+      return JSON.parse(jsonStr)
+    } catch { return null }
+  }
+
+  async summarizeReviews(reviews: { rating: number; text: string }[]): Promise<string | null> {
+    if (reviews.length === 0) return null
+    const reviewTexts = reviews.map((r) => `[${r.rating}/5] ${r.text}`).join('\n')
+    try {
+      return await this.completeText(
+        'Summarize teacher reviews of outdoor education programs. Be objective and highlight key themes.',
+        `Summarize these teacher reviews in 2 sentences. Highlight the most common positive themes and any concerns.\n\nReviews:\n${reviewTexts}\n\nWrite only the 2-sentence summary.`,
+        300
+      )
+    } catch { return null }
+  }
+
+  async generateAllDigests(): Promise<{ teacherId: string; success: boolean }[]> {
+    const client = getRawClient()
+    const teachersResult = await client.execute({ sql: `SELECT id FROM teachers ORDER BY name`, args: [] })
+    const results: { teacherId: string; success: boolean }[] = []
+    const now = Math.floor(Date.now() / 1000)
+
+    for (const row of teachersResult.rows as any[]) {
+      try {
+        const digest = await this.generateDigest(row.id)
+        if (digest) {
+          const reportId = `rpt_${row.id}_${now}`
+          await client.execute({
+            sql: `INSERT OR REPLACE INTO reports (id, recipient_type, recipient_id, report_type, generated_at, content_json)
+                  VALUES (?, 'teacher', ?, 'monthly_digest', ?, ?)`,
+            args: [reportId, row.id, now, JSON.stringify({ html: digest })],
+          })
+          results.push({ teacherId: row.id, success: true })
+        } else {
+          results.push({ teacherId: row.id, success: false })
+        }
+      } catch {
+        results.push({ teacherId: row.id, success: false })
+      }
+    }
+    return results
+  }
+
+  async scoreProspect(prospectId: string): Promise<number | null> {
+    const client = getRawClient()
+    const result = await client.execute({
+      sql: `SELECT pp.*,
+              (SELECT COUNT(*) FROM partners pt WHERE pt.county = pp.county AND pt.status = 'active') as partner_count,
+              (SELECT COUNT(*) FROM schools s WHERE s.county = pp.county) as school_count
+            FROM partner_prospects pp WHERE pp.id = ?`,
+      args: [prospectId],
+    })
+    const prospect = result.rows[0] as any
+    if (!prospect) return null
+
+    try {
+      const text = await this.completeText(
+        'You are a partnership analyst. Score prospective environmental education partners on a scale of 1-10.',
+        `Score this prospective partner organization from 1-10 based on their potential value to the Ten Strands Climate Learning Exchange.\n\nProspect:\n- Name: ${prospect.name}\n- Type: ${prospect.type || 'Unknown'}\n- County: ${prospect.county || 'Unknown'}\n- Existing active partners in county: ${prospect.partner_count || 0}\n- Schools in county: ${prospect.school_count || 0}\n- Notes: ${prospect.notes || 'None'}\n\nScoring criteria:\n- Higher score if county has few existing partners (fill a gap)\n- Higher score if county has many schools (high impact potential)\n- Higher score for specific program types (wetlands, agriculture)\n- Lower score if info is incomplete\n\nRespond with ONLY a number from 1-10, nothing else.`,
+        20
+      )
+      if (!text) return null
+      const score = parseFloat(text.trim())
+      return isNaN(score) ? null : Math.min(10, Math.max(1, score))
     } catch { return null }
   }
 

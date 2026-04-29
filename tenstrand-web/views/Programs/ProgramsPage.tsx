@@ -1,22 +1,82 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, DollarSign, Edit2, Map as MapIcon, Plus, Search, Trash2, Users } from 'lucide-react'
+import { Bookmark, BookmarkCheck, BookOpen, DollarSign, Edit2, Loader2, Map as MapIcon, Plus, Search, Star, Trash2, Users, X } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
 import { formatCost, parseJsonArray } from '@/lib/utils'
 import { ProgramForm } from '@/components/programs/ProgramForm'
+import { useAppStore } from '@/store/app.store'
 
 interface Program { id: string; partnerId: string; title: string; description: string | null; gradeLevels: string | null; subjects: string | null; cost: number | null; season: string | null; maxStudents: number | null; durationMins: number | null }
 interface Partner { id: string; name: string; county?: string | null }
 
+function ReviewModal({ program, partnerName, onClose, onSaved }: { program: Program; partnerName: string; onClose: () => void; onSaved: () => void }) {
+  const activeTeacher = useAppStore((s) => s.activeTeacher)
+  const [rating, setRating] = useState(5)
+  const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!activeTeacher) { toast.error('Select a teacher first'); return }
+    if (!text.trim()) { toast.error('Please write a review'); return }
+    setSaving(true)
+    try {
+      await invoke('review:create', { teacherId: activeTeacher.id, programId: program.id, rating, text: text.trim() })
+      toast.success('Review submitted!')
+      onSaved()
+    } catch { toast.error('Failed to submit review') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between p-5 border-b border-app-border">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">Leave a Review</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{program.title} · {partnerName}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-2">Rating</label>
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button key={n} onClick={() => setRating(n)} className="p-0.5">
+                  <Star className={`w-6 h-6 transition-colors ${n <= rating ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Your experience *</label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} placeholder="Share what you and your students experienced..." className="w-full text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand resize-none" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 p-4 border-t border-app-border">
+          <button onClick={onClose} className="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50">
+            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}Submit Review
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ProgramsPage() {
+  const activeTeacher = useAppStore((s) => s.activeTeacher)
   const [programs, setPrograms] = useState<Program[]>([])
   const [partners, setPartners] = useState<Partner[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editProgram, setEditProgram] = useState<Program | null>(null)
+  const [reviewModal, setReviewModal] = useState<Program | null>(null)
+  const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(new Set())
+  const [togglingBookmark, setTogglingBookmark] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [subject, setSubject] = useState('all')
   const [cost, setCost] = useState('all')
@@ -29,6 +89,30 @@ export function ProgramsPage() {
       .finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    if (!activeTeacher?.id) { setBookmarkSet(new Set()); return }
+    invoke<string[]>('bookmark:getSet', { teacherId: activeTeacher.id })
+      .then((ids) => setBookmarkSet(new Set(ids)))
+      .catch(() => {})
+  }, [activeTeacher?.id])
+
+  const handleBookmarkToggle = async (programId: string) => {
+    if (!activeTeacher) { toast.error('Select a teacher first'); return }
+    setTogglingBookmark(programId)
+    try {
+      if (bookmarkSet.has(programId)) {
+        await invoke('bookmark:remove', { teacherId: activeTeacher.id, programId })
+        setBookmarkSet((prev) => { const s = new Set(prev); s.delete(programId); return s })
+        toast.success('Removed from saved programs')
+      } else {
+        await invoke('bookmark:add', { teacherId: activeTeacher.id, programId })
+        setBookmarkSet((prev) => new Set([...prev, programId]))
+        toast.success('Program saved')
+      }
+    } catch { toast.error('Failed to update bookmark') }
+    finally { setTogglingBookmark(null) }
+  }
 
   const partnerMap = useMemo(() => new Map(partners.map((p) => [p.id, p])), [partners])
   const subjects = useMemo(() => Array.from(new Set(programs.flatMap((p) => parseJsonArray(p.subjects)))).sort(), [programs])
@@ -110,6 +194,21 @@ export function ProgramsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                    {activeTeacher && (
+                      <button
+                        onClick={() => handleBookmarkToggle(p.id)}
+                        disabled={togglingBookmark === p.id}
+                        title={bookmarkSet.has(p.id) ? 'Remove bookmark' : 'Save program'}
+                        className={`p-1.5 rounded-lg transition-colors ${bookmarkSet.has(p.id) ? 'text-blue-500 hover:bg-blue-50' : 'text-gray-300 hover:text-blue-400 hover:bg-blue-50'}`}
+                      >
+                        {togglingBookmark === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : bookmarkSet.has(p.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                    {activeTeacher && (
+                      <button onClick={() => setReviewModal(p)} title="Leave a review" className="p-1.5 rounded-lg hover:bg-amber-50 text-gray-300 hover:text-amber-500 transition-colors">
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button onClick={() => { setEditProgram(p); setShowForm(true) }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
                     <button onClick={() => handleDelete(p.id, p.title)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
@@ -121,6 +220,7 @@ export function ProgramsPage() {
       </div>
 
       {showForm && <ProgramForm program={editProgram} partners={partners} onClose={() => setShowForm(false)} onSaved={() => { setShowForm(false); load() }} />}
+      {reviewModal && <ReviewModal program={reviewModal} partnerName={getPartnerName(reviewModal.partnerId)} onClose={() => setReviewModal(null)} onSaved={() => setReviewModal(null)} />}
     </div>
   )
 }

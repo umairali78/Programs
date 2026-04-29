@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
-import { Database, Upload, RefreshCw, CheckCircle, AlertCircle, Sparkles, Trash2 } from 'lucide-react'
+import { Database, Upload, RefreshCw, CheckCircle, AlertCircle, Sparkles, Trash2, Mail, Download } from 'lucide-react'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/app.store'
@@ -18,7 +18,7 @@ const ENTITY_FIELDS: Record<ImportEntity, { key: string; label: string }[]> = {
 }
 
 export function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'demo' | 'import' | 'database'>('demo')
+  const [activeTab, setActiveTab] = useState<'demo' | 'import' | 'database' | 'digests'>('demo')
   const { setActiveTeacher } = useAppStore()
 
   const [demoLoaded, setDemoLoaded] = useState(false)
@@ -46,6 +46,37 @@ export function AdminPage() {
     try { await invoke('admin:clearDemo'); setDemoLoaded(false); setDemoResult(null); setActiveTeacher(null); toast.success('All data cleared') }
     catch (err: any) { toast.error('Failed to clear data: ' + err.message) }
     finally { setClearingDemo(false) }
+  }
+
+  // Digests
+  const [generatingDigests, setGeneratingDigests] = useState(false)
+  const [digestResults, setDigestResults] = useState<{ teacherId: string; success: boolean }[] | null>(null)
+
+  const handleGenerateDigests = async () => {
+    setGeneratingDigests(true); setDigestResults(null)
+    try {
+      const results = await invoke<{ teacherId: string; success: boolean }[]>('admin:generateAllDigests')
+      setDigestResults(results)
+      const succeeded = results.filter((r) => r.success).length
+      toast.success(`Generated ${succeeded} of ${results.length} digests`)
+    } catch (err: any) { toast.error('Failed: ' + err.message) }
+    finally { setGeneratingDigests(false) }
+  }
+
+  const handleExportCSV = async (entity: 'programs' | 'partners') => {
+    try {
+      const data = await invoke<any[]>(entity === 'programs' ? 'program:list' : 'partner:list')
+      if (!data.length) { toast.error('No data to export'); return }
+      const headers = Object.keys(data[0])
+      const rows = data.map((row) => headers.map((h) => JSON.stringify(row[h] ?? '')).join(','))
+      const csv = [headers.join(','), ...rows].join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `${entity}-${Date.now()}.csv`; a.click()
+      URL.revokeObjectURL(url)
+      toast.success(`Exported ${data.length} ${entity}`)
+    } catch { toast.error('Export failed') }
   }
 
   // Import state
@@ -107,8 +138,8 @@ export function AdminPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <TopBar title="Admin" />
       <div className="flex border-b border-app-border bg-white px-6">
-        {([['demo', 'Demo Data', Sparkles], ['import', 'CSV Import', Upload], ['database', 'Database', Database]] as const).map(([tab, label, Icon]) => (
-          <button key={tab} onClick={() => setActiveTab(tab)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+        {([['demo', 'Demo Data', Sparkles], ['import', 'CSV Import', Upload], ['database', 'Database', Database], ['digests', 'Digests & Export', Mail]] as const).map(([tab, label, Icon]) => (
+          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
             <Icon className="w-3.5 h-3.5" />{label}
           </button>
         ))}
@@ -239,6 +270,51 @@ export function AdminPage() {
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {activeTab === 'digests' && (
+          <div className="max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Monthly Digest Generation</h3>
+              <p className="text-xs text-gray-500 leading-relaxed">Generate personalized monthly digest emails for all teachers. Digests summarise nearby programs and are stored in the database for retrieval. Requires an AI API key in Settings.</p>
+            </div>
+            <div>
+              <button onClick={handleGenerateDigests} disabled={generatingDigests} className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors">
+                {generatingDigests ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                {generatingDigests ? 'Generating…' : 'Generate All Digests'}
+              </button>
+            </div>
+            {digestResults && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-50 rounded-xl px-4 py-2 text-center">
+                    <p className="text-xl font-bold text-green-700">{digestResults.filter((r) => r.success).length}</p>
+                    <p className="text-[10px] text-gray-500">Generated</p>
+                  </div>
+                  <div className="bg-red-50 rounded-xl px-4 py-2 text-center">
+                    <p className="text-xl font-bold text-red-700">{digestResults.filter((r) => !r.success).length}</p>
+                    <p className="text-[10px] text-gray-500">Failed</p>
+                  </div>
+                </div>
+                {digestResults.filter((r) => !r.success).length > 0 && (
+                  <p className="text-xs text-red-600 bg-red-50 rounded-lg p-3">Some digests failed — check that an AI API key is configured in Settings.</p>
+                )}
+              </div>
+            )}
+
+            <div className="border-t border-app-border pt-5">
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Export Data</h3>
+              <p className="text-xs text-gray-500 mb-4">Download current data as CSV files for offline analysis or reporting.</p>
+              <div className="flex items-center gap-3">
+                <button onClick={() => handleExportCSV('programs')} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+                  <Download className="w-3.5 h-3.5" />Export Programs CSV
+                </button>
+                <button onClick={() => handleExportCSV('partners')} className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 text-xs font-medium rounded-lg hover:bg-gray-200 transition-colors">
+                  <Download className="w-3.5 h-3.5" />Export Partners CSV
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

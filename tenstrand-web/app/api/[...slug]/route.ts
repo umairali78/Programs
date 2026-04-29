@@ -10,6 +10,10 @@ import { ClaudeService } from '@/lib/services/claude.service'
 import { CsvImportService } from '@/lib/services/csv-import.service'
 import { InsightsService } from '@/lib/services/insights.service'
 import { InterestService } from '@/lib/services/interest.service'
+import { BookmarkService } from '@/lib/services/bookmark.service'
+import { ReviewService } from '@/lib/services/review.service'
+import { LessonPlanService } from '@/lib/services/lesson-plan.service'
+import { ProspectService } from '@/lib/services/prospect.service'
 import { ensureDemoDataForHostedDemo } from '@/lib/demo-boot'
 import { ensureDatabaseInitialized } from '@/lib/init-db'
 
@@ -53,6 +57,10 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
   const csvSvc = new CsvImportService()
   const insightsSvc = new InsightsService()
   const interestSvc = new InterestService()
+  const bookmarkSvc = new BookmarkService()
+  const reviewSvc = new ReviewService()
+  const lessonPlanSvc = new LessonPlanService()
+  const prospectSvc = new ProspectService()
 
   switch (channel) {
     // ── Partners ──────────────────────────────────────────────────────────────
@@ -198,6 +206,78 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await interestSvc.getInterestSet(body.teacherId))
     case 'interest:count':
       return ok(await interestSvc.countForTeacher(body.teacherId))
+
+    // ── Bookmarks ─────────────────────────────────────────────────────────────
+    case 'bookmark:add':
+      await bookmarkSvc.add(body.teacherId, body.programId)
+      return ok(null)
+    case 'bookmark:remove':
+      await bookmarkSvc.remove(body.teacherId, body.programId)
+      return ok(null)
+    case 'bookmark:listForTeacher':
+      return ok(await bookmarkSvc.listForTeacher(body.teacherId))
+    case 'bookmark:getSet':
+      return ok(await bookmarkSvc.getSet(body.teacherId))
+    case 'bookmark:countForProgram':
+      return ok(await bookmarkSvc.countForProgram(body.programId))
+    case 'bookmark:peerRecommendations':
+      return ok(await bookmarkSvc.getPeerRecommendations(body.teacherId, body.limit ?? 5))
+
+    // ── Reviews ───────────────────────────────────────────────────────────────
+    case 'review:create':
+      return ok(await reviewSvc.create(body.teacherId, body.programId, body.rating, body.text, body.visitedAt))
+    case 'review:listForProgram':
+      return ok(await reviewSvc.listForProgram(body.programId))
+    case 'review:listForTeacher':
+      return ok(await reviewSvc.listForTeacher(body.teacherId))
+    case 'review:delete':
+      await reviewSvc.delete(body.id)
+      return ok(null)
+    case 'review:avgRating':
+      return ok(await reviewSvc.getAvgRating(body.programId))
+    case 'review:spotlight':
+      return ok(await reviewSvc.getSpotlightReview())
+    case 'review:summarize':
+      return ok(await claudeSvc.summarizeReviews(body.reviews))
+
+    // ── Lesson Plans ──────────────────────────────────────────────────────────
+    case 'lessonPlan:create':
+      return ok(await lessonPlanSvc.create(body))
+    case 'lessonPlan:list':
+      return ok(await lessonPlanSvc.list(body.teacherId))
+    case 'lessonPlan:get':
+      return ok(await lessonPlanSvc.get(body.id))
+    case 'lessonPlan:delete':
+      await lessonPlanSvc.delete(body.id)
+      return ok(null)
+    case 'lessonPlan:generate':
+      return ok(await claudeSvc.generateLessonPlan(body.teacherId, body.programId))
+
+    // ── Prospects ─────────────────────────────────────────────────────────────
+    case 'prospect:list':
+      return ok(await prospectSvc.list())
+    case 'prospect:get':
+      return ok(await prospectSvc.get(body.id))
+    case 'prospect:create':
+      return ok(await prospectSvc.create(body))
+    case 'prospect:update':
+      await prospectSvc.update(body.id, body.updates ?? body)
+      return ok(null)
+    case 'prospect:delete':
+      await prospectSvc.delete(body.id)
+      return ok(null)
+    case 'prospect:logOutreach':
+      return ok(await prospectSvc.logOutreach(body.prospectId, body.subject, body.body))
+    case 'prospect:listOutreach':
+      return ok(await prospectSvc.listOutreachForProspect(body.prospectId))
+    case 'prospect:generateOutreach':
+      return ok(await claudeSvc.generateOutreachEmail(body.prospectId))
+    case 'prospect:score':
+      return ok(await claudeSvc.scoreProspect(body.prospectId))
+
+    // ── Batch admin ───────────────────────────────────────────────────────────
+    case 'admin:generateAllDigests':
+      return ok(await claudeSvc.generateAllDigests())
 
     default:
       return err(`Unknown channel: ${channel}`, 404)

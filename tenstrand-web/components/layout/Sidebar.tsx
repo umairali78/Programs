@@ -1,6 +1,6 @@
 'use client'
 import { NavLink } from 'react-router-dom'
-import { Map, Trees, BookOpen, Users, Settings, MessageSquare, Home, GraduationCap } from 'lucide-react'
+import { Map, Trees, BookOpen, Users, Settings, MessageSquare, Home, GraduationCap, FileText, Building2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/ui.store'
 
@@ -11,6 +11,8 @@ const navItems = [
   { to: '/programs', label: 'Programs', icon: BookOpen },
   { to: '/teachers', label: 'Teachers', icon: GraduationCap },
   { to: '/copilot', label: 'AI Copilot', icon: MessageSquare },
+  { to: '/lesson-plans', label: 'Lesson Plans', icon: FileText },
+  { to: '/prospects', label: 'Prospects', icon: Building2 },
   { to: '/admin', label: 'Admin', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings }
 ]
@@ -48,7 +50,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-3 py-3">
-        <p className="text-[10px] text-white/30 text-center">{collapsed ? 'v1' : 'v1.0 — Phase 1+2'}</p>
+        <p className="text-[10px] text-white/30 text-center">{collapsed ? 'v2' : 'v2.0 — Phase 1-5'}</p>
       </div>
     </aside>
   )
