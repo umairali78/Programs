@@ -9,6 +9,9 @@ export type PartnerInsert = {
   type: string
   description?: string
   address?: string
+  city?: string
+  phone?: string
+  topics?: string[]
   lat?: number
   lng?: number
   county?: string
@@ -70,6 +73,9 @@ export class PartnerService {
       type: data.type,
       description: data.description ?? null,
       address: data.address ?? null,
+      city: data.city ?? null,
+      phone: data.phone ?? null,
+      topics: data.topics ? JSON.stringify(data.topics) : null,
       lat: data.lat ?? null,
       lng: data.lng ?? null,
       county: data.county ?? null,
@@ -96,6 +102,9 @@ export class PartnerService {
     if (data.name !== undefined) updates.name = data.name
     if (data.type !== undefined) updates.type = data.type
     if (data.description !== undefined) updates.description = data.description
+    if (data.city !== undefined) updates.city = data.city
+    if (data.phone !== undefined) updates.phone = data.phone
+    if (data.topics !== undefined) updates.topics = JSON.stringify(data.topics)
     if (data.address !== undefined) {
       updates.address = data.address
       updates.geocodingStatus = 'pending'
@@ -126,12 +135,15 @@ export class PartnerService {
     let score = 0
     if (data.name) score += 15
     if (data.description) score += 20
-    if (data.address) score += 15
+    if (data.address) score += 10
     if (data.lat != null) score += 10
     if (data.contactEmail) score += 15
     if (data.website) score += 10
     if (data.county) score += 10
     if (data.type && data.type !== 'general') score += 5
+    if (data.phone) score += 3
+    if (data.topics && data.topics.length > 0) score += 5
+    if (data.city) score += 2
     return Math.min(score, 100)
   }
 }

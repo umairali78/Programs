@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { X, Sparkles, Loader2 } from 'lucide-react'
@@ -13,10 +13,13 @@ const schema = z.object({
   type: z.string().min(1),
   description: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  phone: z.string().optional(),
   county: z.string().optional(),
   contactEmail: z.string().email().optional().or(z.literal('')),
   website: z.string().optional(),
-  status: z.string()
+  status: z.string(),
+  topics: z.array(z.string()),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -26,6 +29,20 @@ const PARTNER_TYPES = [
   { value: 'indigenous_knowledge', label: 'Indigenous Knowledge' }, { value: 'general', label: 'General' }
 ]
 
+const TOPIC_OPTIONS = [
+  'Wetlands', 'Agriculture', 'Climate Science', 'Biodiversity', 'Water Quality',
+  'Air Quality', 'Indigenous Ecology', 'Urban Ecology', 'Marine', 'Forest',
+  'Desert', 'Soil & Land', 'Solar Energy', 'Wildlife'
+]
+
+function safeParseArray(val: string | null | undefined): string[] {
+  if (!val) return []
+  try {
+    const parsed = JSON.parse(val)
+    return Array.isArray(parsed) ? parsed : []
+  } catch { return [] }
+}
+
 interface Props { partner: any | null; onClose: () => void; onSaved: () => void }
 
 export function PartnerForm({ partner, onClose, onSaved }: Props) {
@@ -34,9 +51,21 @@ export function PartnerForm({ partner, onClose, onSaved }: Props) {
   const [showBrochure, setShowBrochure] = useState(false)
   const [extracting, setExtracting] = useState(false)
 
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, control, setValue, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: partner?.name ?? '', type: partner?.type ?? 'general', description: partner?.description ?? '', address: partner?.address ?? '', county: partner?.county ?? '', contactEmail: partner?.contactEmail ?? '', website: partner?.website ?? '', status: partner?.status ?? 'active' }
+    defaultValues: {
+      name: partner?.name ?? '',
+      type: partner?.type ?? 'general',
+      description: partner?.description ?? '',
+      address: partner?.address ?? '',
+      city: partner?.city ?? '',
+      phone: partner?.phone ?? '',
+      county: partner?.county ?? '',
+      contactEmail: partner?.contactEmail ?? '',
+      website: partner?.website ?? '',
+      status: partner?.status ?? 'active',
+      topics: safeParseArray(partner?.topics),
+    }
   })
 
   const onSubmit = async (data: FormValues) => {
@@ -89,18 +118,85 @@ export function PartnerForm({ partner, onClose, onSaved }: Props) {
           )}
 
           <form id="partner-form" onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
-            <Field label="Partner Name *" error={errors.name?.message}><input {...register('name')} className={inputClass} placeholder="Elkhorn Slough Foundation" /></Field>
-            <Field label="Type *"><select {...register('type')} className={inputClass}>{PARTNER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</select></Field>
-            <Field label="Description"><textarea {...register('description')} rows={3} className={inputClass} placeholder="Brief description..." /></Field>
+            <Field label="Partner Name *" error={errors.name?.message}>
+              <input {...register('name')} className={inp} placeholder="Elkhorn Slough Foundation" />
+            </Field>
+
             <div className="grid grid-cols-2 gap-3">
-              <Field label="County"><input {...register('county')} className={inputClass} placeholder="Santa Cruz" /></Field>
-              <Field label="Status"><select {...register('status')} className={inputClass}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>
+              <Field label="Type *">
+                <select {...register('type')} className={inp}>
+                  {PARTNER_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Status">
+                <select {...register('status')} className={inp}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </Field>
             </div>
-            <Field label="Address (for geocoding)"><input {...register('address')} className={inputClass} placeholder="1700 Elkhorn Rd, Watsonville, CA" /></Field>
+
+            <Field label="Description">
+              <textarea {...register('description')} rows={3} className={inp} placeholder="What this organization does and their climate education focus…" />
+            </Field>
+
+            {/* Topics */}
+            <Field label="Focus Topics / Subject Areas">
+              <Controller
+                control={control}
+                name="topics"
+                render={({ field }) => (
+                  <div className="flex flex-wrap gap-1.5 mt-0.5">
+                    {TOPIC_OPTIONS.map((t) => (
+                      <button
+                        key={t} type="button"
+                        onClick={() => {
+                          const next = field.value.includes(t)
+                            ? field.value.filter((x) => x !== t)
+                            : [...field.value, t]
+                          field.onChange(next)
+                        }}
+                        className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                          field.value.includes(t)
+                            ? 'bg-brand text-white border-brand'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-brand'
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              />
+            </Field>
+
+            {/* Location */}
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Contact Email" error={errors.contactEmail?.message}><input {...register('contactEmail')} type="email" className={inputClass} placeholder="info@example.org" /></Field>
-              <Field label="Website"><input {...register('website')} className={inputClass} placeholder="https://example.org" /></Field>
+              <Field label="County">
+                <input {...register('county')} className={inp} placeholder="Santa Cruz" />
+              </Field>
+              <Field label="City">
+                <input {...register('city')} className={inp} placeholder="Watsonville" />
+              </Field>
             </div>
+
+            <Field label="Address (for map geocoding)">
+              <input {...register('address')} className={inp} placeholder="1700 Elkhorn Rd, Watsonville, CA 95076" />
+            </Field>
+
+            {/* Contact */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Contact Email" error={errors.contactEmail?.message}>
+                <input {...register('contactEmail')} type="email" className={inp} placeholder="info@example.org" />
+              </Field>
+              <Field label="Phone">
+                <input {...register('phone')} className={inp} placeholder="(831) 555-0100" />
+              </Field>
+            </div>
+
+            <Field label="Website">
+              <input {...register('website')} className={inp} placeholder="https://example.org" />
+            </Field>
           </form>
         </div>
 
@@ -119,4 +215,4 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   return <div><label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>{children}{error && <p className="mt-0.5 text-xs text-red-500">{error}</p>}</div>
 }
 
-const inputClass = 'w-full text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand bg-white'
+const inp = 'w-full text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand bg-white'

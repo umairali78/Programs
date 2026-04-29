@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { PartnerService } from '@/lib/services/partner.service'
 import { Plus, Pencil } from 'lucide-react'

@@ -11,6 +11,11 @@ import { useAppStore } from '@/store/app.store'
 const GRADE_LEVELS = ['TK', 'K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
 const SUBJECTS = ['Life Science', 'Earth Science', 'Agriculture', 'Water', 'Biodiversity', 'Climate Justice', 'Indigenous Ecological Knowledge']
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter']
+const FORMATS = [
+  { value: 'in_person', label: 'In-Person' },
+  { value: 'virtual', label: 'Virtual' },
+  { value: 'hybrid', label: 'Hybrid' },
+]
 
 const schema = z.object({
   partnerId: z.string().min(1, 'Partner required'),
@@ -21,7 +26,13 @@ const schema = z.object({
   season: z.array(z.string()),
   maxStudents: z.number().optional(),
   durationMins: z.number().optional(),
-  cost: z.number().optional()
+  cost: z.number().optional(),
+  sessionCount: z.number().optional(),
+  programDates: z.string().optional(),
+  format: z.string().optional(),
+  registrationUrl: z.string().optional(),
+  registrationDeadline: z.string().optional(),
+  registrationNotes: z.string().optional(),
 })
 type FormValues = z.infer<typeof schema>
 
@@ -48,13 +59,20 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
     resolver: zodResolver(schema),
     defaultValues: {
       partnerId: program?.partnerId ?? (partners[0]?.id ?? ''),
-      title: program?.title ?? '', description: program?.description ?? '',
+      title: program?.title ?? '',
+      description: program?.description ?? '',
       gradeLevels: safeParseArray(program?.gradeLevels),
       subjects: safeParseArray(program?.subjects),
       season: safeParseArray(program?.season),
       maxStudents: program?.maxStudents ?? undefined,
       durationMins: program?.durationMins ?? undefined,
-      cost: program?.cost ?? undefined
+      cost: program?.cost ?? undefined,
+      sessionCount: program?.sessionCount ?? undefined,
+      programDates: program?.programDates ?? '',
+      format: program?.format ?? 'in_person',
+      registrationUrl: program?.registrationUrl ?? '',
+      registrationDeadline: program?.registrationDeadline ?? '',
+      registrationNotes: program?.registrationNotes ?? '',
     }
   })
 
@@ -83,8 +101,15 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
   }
 
   const ToggleChip = ({ value, field, color = 'brand' }: { value: string; field: any; color?: string }) => (
-    <button type="button" onClick={() => { const next = field.value.includes(value) ? field.value.filter((x: string) => x !== value) : [...field.value, value]; field.onChange(next) }}
-      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${field.value.includes(value) ? `bg-${color} text-white border-${color}` : 'bg-white text-gray-600 border-gray-200 hover:border-brand'}`}>
+    <button type="button"
+      onClick={() => {
+        const next = field.value.includes(value)
+          ? field.value.filter((x: string) => x !== value)
+          : [...field.value, value]
+        field.onChange(next)
+      }}
+      className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${field.value.includes(value) ? `bg-${color} text-white border-${color}` : 'bg-white text-gray-600 border-gray-200 hover:border-brand'}`}
+    >
       {value}
     </button>
   )
@@ -99,26 +124,82 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
 
         <div className="overflow-y-auto scrollbar-thin flex-1">
           <form id="program-form" onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
-            <Field label="Partner *" error={errors.partnerId?.message}><select {...register('partnerId')} className={inputClass}>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-            <Field label="Program Title *" error={errors.title?.message}><input {...register('title')} className={inputClass} placeholder="Watershed Explorers" /></Field>
-            <Field label="Description"><textarea {...register('description')} rows={3} className={inputClass} placeholder="What will students experience and learn?" /></Field>
 
+            {/* ── Core info ─────────────────────────────────────────────── */}
+            <Field label="Partner *" error={errors.partnerId?.message}>
+              <select {...register('partnerId')} className={inp}>
+                {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Program Title *" error={errors.title?.message}>
+              <input {...register('title')} className={inp} placeholder="Watershed Explorers" />
+            </Field>
+            <Field label="Description">
+              <textarea {...register('description')} rows={3} className={inp} placeholder="What will students experience and learn?" />
+            </Field>
+
+            {/* ── Audience ──────────────────────────────────────────────── */}
             <Field label="Grade Levels">
-              <Controller control={control} name="gradeLevels" render={({ field }) => <div className="flex flex-wrap gap-1">{GRADE_LEVELS.map((g) => <ToggleChip key={g} value={g} field={field} />)}</div>} />
+              <Controller control={control} name="gradeLevels" render={({ field }) => (
+                <div className="flex flex-wrap gap-1">{GRADE_LEVELS.map((g) => <ToggleChip key={g} value={g} field={field} />)}</div>
+              )} />
             </Field>
             <Field label="Subjects">
-              <Controller control={control} name="subjects" render={({ field }) => <div className="flex flex-wrap gap-1">{SUBJECTS.map((s) => <ToggleChip key={s} value={s} field={field} />)}</div>} />
+              <Controller control={control} name="subjects" render={({ field }) => (
+                <div className="flex flex-wrap gap-1">{SUBJECTS.map((s) => <ToggleChip key={s} value={s} field={field} />)}</div>
+              )} />
             </Field>
             <Field label="Season">
-              <Controller control={control} name="season" render={({ field }) => <div className="flex flex-wrap gap-1">{SEASONS.map((s) => <ToggleChip key={s} value={s} field={field} color="sky" />)}</div>} />
+              <Controller control={control} name="season" render={({ field }) => (
+                <div className="flex flex-wrap gap-1">{SEASONS.map((s) => <ToggleChip key={s} value={s} field={field} color="sky" />)}</div>
+              )} />
             </Field>
 
+            {/* ── Logistics ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Cost ($)"><input {...register('cost', { valueAsNumber: true })} type="number" min="0" step="0.50" className={inputClass} placeholder="0" /></Field>
-              <Field label="Max Students"><input {...register('maxStudents', { valueAsNumber: true })} type="number" min="1" className={inputClass} placeholder="30" /></Field>
-              <Field label="Duration (min)"><input {...register('durationMins', { valueAsNumber: true })} type="number" min="30" className={inputClass} placeholder="120" /></Field>
+              <Field label="Cost ($)">
+                <input {...register('cost', { valueAsNumber: true })} type="number" min="0" step="0.50" className={inp} placeholder="0" />
+              </Field>
+              <Field label="Max Students">
+                <input {...register('maxStudents', { valueAsNumber: true })} type="number" min="1" className={inp} placeholder="30" />
+              </Field>
+              <Field label="Duration (min)">
+                <input {...register('durationMins', { valueAsNumber: true })} type="number" min="30" className={inp} placeholder="120" />
+              </Field>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Number of Sessions">
+                <input {...register('sessionCount', { valueAsNumber: true })} type="number" min="1" className={inp} placeholder="e.g. 3" />
+              </Field>
+              <Field label="Format">
+                <select {...register('format')} className={inp}>
+                  {FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Program Dates / Schedule">
+              <input {...register('programDates')} className={inp} placeholder="e.g. Tuesdays April–June 2025, or Spring semester only" />
+            </Field>
+
+            {/* ── Registration ──────────────────────────────────────────── */}
+            <div className="pt-1">
+              <p className="text-xs font-semibold text-gray-700 mb-3">Registration Details</p>
+              <div className="space-y-3">
+                <Field label="Registration URL">
+                  <input {...register('registrationUrl')} className={inp} placeholder="https://partner.org/register" />
+                </Field>
+                <Field label="Registration Deadline">
+                  <input {...register('registrationDeadline')} className={inp} placeholder="e.g. March 15, 2025 or 2 weeks before program" />
+                </Field>
+                <Field label="Registration Notes">
+                  <textarea {...register('registrationNotes')} rows={2} className={inp} placeholder="e.g. Email programs@partner.org to request a slot — first-come, first-served" />
+                </Field>
+              </div>
+            </div>
+
+            {/* ── CA Standards ──────────────────────────────────────────── */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-medium text-gray-700">CA Standards</label>
@@ -153,6 +234,7 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
                 </div>
               )}
             </div>
+
           </form>
         </div>
 
@@ -170,4 +252,4 @@ export function ProgramForm({ program, partners, onClose, onSaved }: Props) {
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return <div><label className="block text-xs font-medium text-gray-700 mb-1">{label}</label>{children}{error && <p className="mt-0.5 text-xs text-red-500">{error}</p>}</div>
 }
-const inputClass = 'w-full text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand bg-white'
+const inp = 'w-full text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand bg-white'

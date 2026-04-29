@@ -13,6 +13,12 @@ export type ProgramInsert = {
   durationMins?: number
   cost?: number
   season?: string[]
+  programDates?: string
+  sessionCount?: number
+  format?: string
+  registrationUrl?: string
+  registrationDeadline?: string
+  registrationNotes?: string
   lat?: number
   lng?: number
   standards?: { code: string; desc?: string; framework: string }[]
@@ -75,6 +81,12 @@ export class ProgramService {
       durationMins: data.durationMins ?? null,
       cost: data.cost ?? 0,
       season: data.season ? JSON.stringify(data.season) : null,
+      programDates: data.programDates ?? null,
+      sessionCount: data.sessionCount ?? null,
+      format: data.format ?? 'in_person',
+      registrationUrl: data.registrationUrl ?? null,
+      registrationDeadline: data.registrationDeadline ?? null,
+      registrationNotes: data.registrationNotes ?? null,
       lat: data.lat ?? null,
       lng: data.lng ?? null,
       createdAt: new Date()
@@ -107,6 +119,12 @@ export class ProgramService {
     if (data.durationMins !== undefined) updates.durationMins = data.durationMins
     if (data.cost !== undefined) updates.cost = data.cost
     if (data.season !== undefined) updates.season = JSON.stringify(data.season)
+    if (data.programDates !== undefined) updates.programDates = data.programDates
+    if (data.sessionCount !== undefined) updates.sessionCount = data.sessionCount
+    if (data.format !== undefined) updates.format = data.format
+    if (data.registrationUrl !== undefined) updates.registrationUrl = data.registrationUrl
+    if (data.registrationDeadline !== undefined) updates.registrationDeadline = data.registrationDeadline
+    if (data.registrationNotes !== undefined) updates.registrationNotes = data.registrationNotes
     if (data.lat !== undefined) updates.lat = data.lat
     if (data.lng !== undefined) updates.lng = data.lng
 

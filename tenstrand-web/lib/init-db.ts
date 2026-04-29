@@ -171,6 +171,19 @@ CREATE TABLE IF NOT EXISTS program_interests (
 );
 `
 
+// New columns added after initial schema — ignored if already exist
+const MIGRATIONS = [
+  "ALTER TABLE partners ADD COLUMN phone TEXT",
+  "ALTER TABLE partners ADD COLUMN city TEXT",
+  "ALTER TABLE partners ADD COLUMN topics TEXT",
+  "ALTER TABLE programs ADD COLUMN program_dates TEXT",
+  "ALTER TABLE programs ADD COLUMN session_count INTEGER",
+  "ALTER TABLE programs ADD COLUMN format TEXT DEFAULT 'in_person'",
+  "ALTER TABLE programs ADD COLUMN registration_url TEXT",
+  "ALTER TABLE programs ADD COLUMN registration_deadline TEXT",
+  "ALTER TABLE programs ADD COLUMN registration_notes TEXT",
+]
+
 let initPromise: Promise<void> | null = null
 
 export async function ensureDatabaseInitialized() {
@@ -178,8 +191,13 @@ export async function ensureDatabaseInitialized() {
     initPromise = (async () => {
       const client = getRawClient()
       const statements = DDL.split(';').map((s) => s.trim()).filter(Boolean)
-      // batch() sends all DDL in one HTTP round-trip to Turso
       await client.batch(statements, 'write')
+      // Run migrations one-by-one; ignore "duplicate column name" on re-runs
+      for (const sql of MIGRATIONS) {
+        try { await client.execute(sql) } catch (e: any) {
+          if (!e.message?.toLowerCase().includes('duplicate column')) throw e
+        }
+      }
     })()
   }
   await initPromise

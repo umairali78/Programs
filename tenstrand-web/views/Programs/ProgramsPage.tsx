@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Bookmark, BookmarkCheck, BookOpen, DollarSign, Edit2, Loader2, Map as MapIcon, Plus, Search, Star, Trash2, Users, X } from 'lucide-react'
+import { Bookmark, BookmarkCheck, BookOpen, Calendar, DollarSign, Edit2, ExternalLink, Loader2, Map as MapIcon, Monitor, Plus, Search, Star, Trash2, Users, X } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
@@ -9,7 +9,7 @@ import { formatCost, parseJsonArray } from '@/lib/utils'
 import { ProgramForm } from '@/components/programs/ProgramForm'
 import { useAppStore } from '@/store/app.store'
 
-interface Program { id: string; partnerId: string; title: string; description: string | null; gradeLevels: string | null; subjects: string | null; cost: number | null; season: string | null; maxStudents: number | null; durationMins: number | null }
+interface Program { id: string; partnerId: string; title: string; description: string | null; gradeLevels: string | null; subjects: string | null; cost: number | null; season: string | null; maxStudents: number | null; durationMins: number | null; sessionCount: number | null; programDates: string | null; format: string | null; registrationUrl: string | null; registrationDeadline: string | null; registrationNotes: string | null }
 interface Partner { id: string; name: string; county?: string | null }
 
 function ReviewModal({ program, partnerName, onClose, onSaved }: { program: Program; partnerName: string; onClose: () => void; onSaved: () => void }) {
@@ -189,9 +189,29 @@ export function ProgramsPage() {
                     <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
                       <span>{formatCost(p.cost)}</span>
                       {p.maxStudents && <span className="flex items-center gap-1"><Users className="w-3 h-3" />Max {p.maxStudents}</span>}
+                      {p.durationMins && <span>{p.durationMins < 60 ? `${p.durationMins}m` : `${Math.round(p.durationMins / 60 * 10) / 10}h`}</span>}
+                      {p.sessionCount && p.sessionCount > 1 && <span>{p.sessionCount} sessions</span>}
+                      {p.format && p.format !== 'in_person' && (
+                        <span className="flex items-center gap-1">
+                          <Monitor className="w-3 h-3" />{p.format === 'virtual' ? 'Virtual' : 'Hybrid'}
+                        </span>
+                      )}
+                      {p.programDates && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{p.programDates}</span>}
                       {parseJsonArray(p.gradeLevels).length > 0 && <span>Gr. {parseJsonArray(p.gradeLevels).join(', ')}</span>}
                       {parseJsonArray(p.subjects).slice(0, 3).map((s) => <span key={s} className="px-1.5 py-0.5 rounded-full bg-brand-light text-brand">{s}</span>)}
                     </div>
+                    {/* Registration info */}
+                    {(p.registrationUrl || p.registrationDeadline || p.registrationNotes) && (
+                      <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-gray-400 border-t border-gray-50 pt-2">
+                        {p.registrationDeadline && <span>Deadline: {p.registrationDeadline}</span>}
+                        {p.registrationNotes && <span className="truncate max-w-xs">{p.registrationNotes}</span>}
+                        {p.registrationUrl && (
+                          <a href={p.registrationUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-brand hover:underline">
+                            <ExternalLink className="w-3 h-3" />Register
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     {activeTeacher && (

@@ -12,6 +12,12 @@ export const programs = sqliteTable('programs', {
   durationMins: integer('duration_mins'),
   cost: real('cost').default(0),
   season: text('season'),
+  programDates: text('program_dates'),
+  sessionCount: integer('session_count'),
+  format: text('format').default('in_person'),
+  registrationUrl: text('registration_url'),
+  registrationDeadline: text('registration_deadline'),
+  registrationNotes: text('registration_notes'),
   lat: real('lat'),
   lng: real('lng'),
   createdAt: integer('created_at', { mode: 'timestamp' })

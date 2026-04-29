@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { ProgramService } from '@/lib/services/program.service'
 import { PartnerService } from '@/lib/services/partner.service'

@@ -1,14 +1,14 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BookOpen, Edit2, Globe, Mail, MapPin, Plus, Search, Trash2, Trees } from 'lucide-react'
+import { BookOpen, Edit2, Globe, Mail, MapPin, Phone, Plus, Search, Tag, Trash2, Trees } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
 import { PartnerForm } from '@/components/partners/PartnerForm'
 import { getPartnerTypeColor, getPartnerTypeName } from '@/lib/utils'
 
-interface Partner { id: string; name: string; type: string; description: string | null; address: string | null; lat: number | null; lng: number | null; county: string | null; contactEmail: string | null; website: string | null; status: string; profileScore: number | null; geocodingStatus: string | null }
+interface Partner { id: string; name: string; type: string; description: string | null; address: string | null; city: string | null; phone: string | null; topics: string | null; lat: number | null; lng: number | null; county: string | null; contactEmail: string | null; website: string | null; status: string; profileScore: number | null; geocodingStatus: string | null }
 interface Program { id: string; partnerId: string; title: string }
 
 export function PartnersPage() {
@@ -114,8 +114,16 @@ export function PartnersPage() {
                     </div>
                   </div>
                   {p.description && <p className="text-xs text-gray-500 mt-1.5 line-clamp-2">{p.description}</p>}
+                  {/* Topics */}
+                  {p.topics && (() => { try { const t = JSON.parse(p.topics); return t.length > 0 ? <div className="flex flex-wrap gap-1 mt-1.5">{t.slice(0, 5).map((topic: string) => <span key={topic} className="text-[10px] px-1.5 py-0.5 bg-brand-light text-brand rounded-full">{topic}</span>)}</div> : null } catch { return null } })()}
                   <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-400">
-                    {p.address && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{p.geocodingStatus === 'success' ? 'Geocoded' : p.geocodingStatus}</span>}
+                    {(p.address || p.city || p.county) && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" />
+                        {[p.city, p.county ? `${p.county} County` : null].filter(Boolean).join(', ') || (p.geocodingStatus === 'success' ? 'Geocoded' : 'Address set')}
+                      </span>
+                    )}
+                    {p.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{p.phone}</span>}
                     {p.contactEmail && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{p.contactEmail}</span>}
                     {p.website && <span className="flex items-center gap-1"><Globe className="w-3 h-3" />{p.website.replace(/https?:\/\//, '')}</span>}
                     <Link to="/programs" className="flex items-center gap-1 text-brand"><BookOpen className="w-3 h-3" />View programs</Link>

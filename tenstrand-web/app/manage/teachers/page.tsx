@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { TeacherService } from '@/lib/services/teacher.service'
 
 function safeParseArray(val: string | null | undefined): string[] {
