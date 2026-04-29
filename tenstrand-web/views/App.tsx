@@ -13,6 +13,7 @@ import { CopilotPage } from '@/views/Copilot/CopilotPage'
 import { LessonPlansPage } from '@/views/LessonPlans/LessonPlansPage'
 import { ProspectorPage } from '@/views/Prospector/ProspectorPage'
 import { OnboardingPage } from '@/views/Onboarding/OnboardingPage'
+import { EquityPage } from '@/views/Equity/EquityPage'
 import { useAppStore } from '@/store/app.store'
 import { invoke } from '@/lib/api'
 import { Toaster } from 'sonner'
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="/lesson-plans" element={<LessonPlansPage />} />
             <Route path="/prospector" element={<ProspectorPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/equity" element={<EquityPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,10 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { Bot, CheckCircle2, ChevronRight, Loader2, Plus, RefreshCw, Send, Sparkles, User } from 'lucide-react'
+import {
+  BookOpen, Bot, Building2, CheckCircle2, FileText,
+  Globe, GraduationCap, Leaf, Loader2,
+  Mail, MapPin, Plus, RefreshCw, Send, Sparkles, User
+} from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
@@ -15,6 +19,18 @@ interface ProfilePreview {
 
 const GREETING = "Hi! I'm the Ten Strands onboarding assistant. I'll help you create a compelling profile on the Climate Learning Exchange — it only takes a few minutes. To start: what is your organization's name?"
 
+const FIELDS = [
+  { key: 'orgName',       label: 'Organization Name', Icon: Building2,     desc: 'Legal or common name of your organization' },
+  { key: 'description',   label: 'Description',        Icon: FileText,      desc: 'Mission, focus area, and what makes you unique' },
+  { key: 'programs',      label: 'Programs Offered',   Icon: BookOpen,      desc: 'Climate education programs available to schools' },
+  { key: 'gradeLevels',   label: 'Grade Levels',       Icon: GraduationCap, desc: 'Which grades your programs serve (K–12)' },
+  { key: 'subjects',      label: 'Subject Areas',      Icon: Leaf,          desc: 'Topics: wetlands, agriculture, climate, etc.' },
+  { key: 'county',        label: 'County',             Icon: MapPin,        desc: 'California county where you primarily operate' },
+  { key: 'address',       label: 'Address',            Icon: MapPin,        desc: 'Physical location for map display and geocoding' },
+  { key: 'contactEmail',  label: 'Contact Email',      Icon: Mail,          desc: 'Primary contact for teacher inquiries' },
+  { key: 'website',       label: 'Website',            Icon: Globe,         desc: "Your organization's web presence" },
+]
+
 export function OnboardingPage() {
   const hasClaudeKey = useAppStore((s) => s.hasClaudeKey)
   const [stage, setStage] = useState<'chat' | 'preview' | 'done'>('chat')
@@ -28,6 +44,8 @@ export function OnboardingPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const completedCount = FIELDS.filter(f => collectedData[f.key]).length
 
   const handleSend = async () => {
     const text = input.trim()
@@ -108,63 +126,137 @@ export function OnboardingPage() {
       )}
 
       {stage === 'chat' && (
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* Progress indicator */}
-          {Object.keys(collectedData).length > 0 && (
-            <div className="px-6 pt-3">
-              <div className="bg-white border border-app-border rounded-xl p-3 flex flex-wrap gap-2">
-                {[['orgName','Organization'], ['description','Description'], ['programs','Programs'], ['gradeLevels','Grades'], ['subjects','Subjects'], ['county','County'], ['address','Address'], ['contactEmail','Email'], ['website','Website']].map(([key, label]) => (
-                  <span key={key} className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${collectedData[key] ? 'bg-green-50 border-green-200 text-green-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
-                    {collectedData[key] && <CheckCircle2 className="w-2.5 h-2.5" />}{label}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="flex flex-1 overflow-hidden">
 
-          {/* Chat messages */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4 space-y-4">
-            {messages.map((m, i) => (
-              <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${m.role === 'assistant' ? 'bg-brand text-white' : 'bg-gray-200 text-gray-600'}`}>
-                  {m.role === 'assistant' ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+          {/* ── Left info panel ─────────────────────────────────────────── */}
+          <div className="w-72 shrink-0 border-r border-app-border bg-gray-50 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="p-5 border-b border-app-border bg-white">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
+                  <Bot className="w-3.5 h-3.5" />
                 </div>
-                <div className={`max-w-lg rounded-2xl px-4 py-3 text-sm leading-relaxed ${m.role === 'assistant' ? 'bg-white border border-app-border text-gray-800' : 'bg-brand text-white'}`}>
-                  {m.content}
-                </div>
+                <p className="text-sm font-semibold text-gray-900">What we'll collect</p>
               </div>
-            ))}
-            {(sending || buildingProfile) && (
-              <div className="flex gap-3">
-                <div className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0"><Bot className="w-3.5 h-3.5" /></div>
-                <div className="bg-white border border-app-border rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-gray-400">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {buildingProfile ? 'Building your profile…' : 'Thinking…'}
-                </div>
+              <p className="text-[11px] text-gray-500 leading-relaxed">
+                The agent gathers 9 pieces of information through conversation to build your complete partner profile on the Climate Learning Exchange.
+              </p>
+            </div>
+
+            {/* Progress bar */}
+            <div className="px-4 pt-4 pb-2 bg-white border-b border-app-border">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Profile completeness</span>
+                <span className="text-[10px] font-bold text-brand">{completedCount}/{FIELDS.length}</span>
               </div>
-            )}
-            <div ref={bottomRef} />
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand rounded-full transition-all duration-500"
+                  style={{ width: `${(completedCount / FIELDS.length) * 100}%` }}
+                />
+              </div>
+              {completedCount === FIELDS.length && (
+                <p className="text-[10px] text-green-600 mt-1.5 font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />All fields collected — building profile…
+                </p>
+              )}
+            </div>
+
+            {/* Field checklist */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-1.5">
+              {FIELDS.map(({ key, label, Icon, desc }) => {
+                const done = !!collectedData[key]
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all duration-200 ${
+                      done
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-white border-gray-100 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
+                      done ? 'bg-green-100' : 'bg-gray-100'
+                    }`}>
+                      {done
+                        ? <CheckCircle2 className="w-3.5 h-3.5 text-green-600" />
+                        : <Icon className="w-3 h-3 text-gray-400" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-[11px] font-semibold leading-tight ${done ? 'text-green-800' : 'text-gray-700'}`}>{label}</p>
+                      <p className="text-[10px] text-gray-400 leading-snug mt-0.5">{desc}</p>
+                      {done && collectedData[key] && (
+                        <p className="text-[10px] text-green-600 mt-1 truncate font-medium">
+                          ✓ {collectedData[key].length > 40 ? collectedData[key].slice(0, 40) + '…' : collectedData[key]}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Footer tip */}
+            <div className="p-3 border-t border-app-border bg-white">
+              <p className="text-[10px] text-gray-400 leading-snug">
+                Answers are saved as you go. You can provide multiple pieces of information in one message.
+              </p>
+            </div>
           </div>
 
-          {/* Input */}
-          <div className="border-t border-app-border bg-white p-4">
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                placeholder={hasClaudeKey ? 'Type your answer…' : 'Add an AI API key in Settings to use onboarding'}
-                disabled={!hasClaudeKey || sending || buildingProfile}
-                className="flex-1 bg-transparent text-sm outline-none"
-              />
-              <button onClick={handleSend} disabled={!input.trim() || sending || !hasClaudeKey || buildingProfile} className="p-1.5 rounded-lg bg-brand text-white disabled:opacity-40 hover:bg-brand-dark transition-colors">
-                <Send className="w-3.5 h-3.5" />
-              </button>
+          {/* ── Right chat area ──────────────────────────────────────────── */}
+          <div className="flex flex-col flex-1 overflow-hidden">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin px-6 py-4 space-y-4">
+              {messages.map((m, i) => (
+                <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${m.role === 'assistant' ? 'bg-brand text-white' : 'bg-gray-200 text-gray-600'}`}>
+                    {m.role === 'assistant' ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                  </div>
+                  <div className={`max-w-lg rounded-2xl px-4 py-3 text-sm leading-relaxed ${m.role === 'assistant' ? 'bg-white border border-app-border text-gray-800' : 'bg-brand text-white'}`}>
+                    {m.content}
+                  </div>
+                </div>
+              ))}
+              {(sending || buildingProfile) && (
+                <div className="flex gap-3">
+                  <div className="w-7 h-7 rounded-full bg-brand text-white flex items-center justify-center shrink-0">
+                    <Bot className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="bg-white border border-app-border rounded-2xl px-4 py-3 flex items-center gap-2 text-sm text-gray-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    {buildingProfile ? 'Building your profile…' : 'Thinking…'}
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input bar */}
+            <div className="border-t border-app-border bg-white p-4">
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+                  placeholder={hasClaudeKey ? 'Type your answer…' : 'Add an AI API key in Settings to use onboarding'}
+                  disabled={!hasClaudeKey || sending || buildingProfile}
+                  className="flex-1 bg-transparent text-sm outline-none"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || sending || !hasClaudeKey || buildingProfile}
+                  className="p-1.5 rounded-lg bg-brand text-white disabled:opacity-40 hover:bg-brand-dark transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* ── Preview stage ──────────────────────────────────────────────── */}
       {stage === 'preview' && profile && (
         <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
           <div className="max-w-2xl space-y-5">
@@ -222,6 +314,7 @@ export function OnboardingPage() {
         </div>
       )}
 
+      {/* ── Done stage ─────────────────────────────────────────────────── */}
       {stage === 'done' && (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center max-w-sm">
