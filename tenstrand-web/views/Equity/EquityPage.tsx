@@ -121,11 +121,8 @@ export function EquityPage() {
           </div>
 
           <div className="border-t border-app-border px-5 py-3 bg-gray-50">
-            <p className="text-[11px] text-gray-600 font-mono">
-              Priority Score = (burden × 0.35) + (title1% × 0.30) + (coverageGap × 0.25) + (rural ? 10 : 0)
-            </p>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Scores range 0–100+. Thresholds: Critical ≥65 · High 45–64 · Medium 25–44 · Low &lt;25
+            <p className="text-[10px] text-gray-400">
+              Scores range 0–100+. Thresholds: Critical ≥65 · High 45–64 · Medium 25–44 · Low &lt;25. Click any county row to see its exact breakdown.
             </p>
           </div>
         </div>

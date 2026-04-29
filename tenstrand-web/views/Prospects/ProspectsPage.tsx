@@ -97,7 +97,7 @@ function OutreachModal({ prospect, onClose, onLogged }: { prospect: Prospect; on
     try {
       const result = await invoke<{ subject: string; body: string } | null>('prospect:generateOutreach', { prospectId: prospect.id })
       if (result) { setSubject(result.subject); setBody(result.body); toast.success('Email generated') }
-      else toast.error('AI unavailable — add Claude API key in Settings')
+      else toast.error('AI unavailable — add an AI API key in Settings')
     } catch { toast.error('Generation failed') }
     finally { setGenerating(false) }
   }
@@ -181,7 +181,7 @@ export function ProspectsPage() {
         toast.success(`AI score: ${score}/10`)
         load()
       } else {
-        toast.error('AI unavailable — add Claude API key in Settings')
+        toast.error('AI unavailable — add an AI API key in Settings')
       }
     } catch { toast.error('Scoring failed') }
     finally { setScoring(null) }

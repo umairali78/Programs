@@ -1,20 +1,21 @@
 'use client'
 import { NavLink } from 'react-router-dom'
-import { Map, Trees, BookOpen, Users, Settings, MessageSquare, Home, GraduationCap, FileText, Search, UserPlus, BarChart2 } from 'lucide-react'
+import { Map, Trees, BookOpen, Users, Settings, MessageSquare, Home, GraduationCap, FileText, Search, UserPlus, BarChart2, Mail } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUiStore } from '@/store/ui.store'
 
 const navItems = [
   { to: '/', label: 'Dashboard', icon: Home },
   { to: '/map', label: 'Explore Map', icon: Map },
+  { to: '/onboarding', label: 'Partner Onboarding', icon: UserPlus },
   { to: '/partners', label: 'Partners', icon: Trees },
   { to: '/programs', label: 'Programs', icon: BookOpen },
   { to: '/teachers', label: 'Teachers', icon: GraduationCap },
   { to: '/copilot', label: 'AI Copilot', icon: MessageSquare },
   { to: '/lesson-plans', label: 'Lesson Plans', icon: FileText },
   { to: '/prospector', label: 'Prospector', icon: Search },
-  { to: '/onboarding', label: 'Onboarding', icon: UserPlus },
   { to: '/equity', label: 'Equity Mapper', icon: BarChart2 },
+  { to: '/digests', label: 'Digests', icon: Mail },
   { to: '/admin', label: 'Admin', icon: Users },
   { to: '/settings', label: 'Settings', icon: Settings }
 ]

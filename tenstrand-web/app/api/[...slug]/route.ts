@@ -278,6 +278,8 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await claudeSvc.scoreProspect(body.prospectId))
     case 'prospect:discover':
       return ok(await claudeSvc.discoverProspects(body.coverageGaps))
+    case 'prospect:scrapeUrl':
+      return ok(await claudeSvc.scrapeAndExtractOrg(body.url))
 
     // ── Onboarding ────────────────────────────────────────────────────────────
     case 'onboarding:turn':
@@ -286,6 +288,10 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await claudeSvc.buildPartnerProfileFromOnboarding(body.data))
     case 'onboarding:createPartner':
       return ok(await partnerSvc.create(body))
+
+    // ── Digests ───────────────────────────────────────────────────────────────
+    case 'digest:generate':
+      return ok(await claudeSvc.generateAndSaveDigest(body.teacherId))
 
     // ── Batch admin ───────────────────────────────────────────────────────────
     case 'admin:generateAllDigests':

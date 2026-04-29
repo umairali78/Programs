@@ -40,7 +40,7 @@ function CreateModal({ onClose, onSaved, programs, partners }: {
         if (!title && prog) setTitle(`Pre-Visit: ${prog.title}`)
         toast.success('Lesson plan generated')
       } else {
-        toast.error('AI unavailable — add Claude API key in Settings')
+        toast.error('AI unavailable — add an AI API key in Settings')
       }
     } catch { toast.error('Generation failed') }
     finally { setGenerating(false) }

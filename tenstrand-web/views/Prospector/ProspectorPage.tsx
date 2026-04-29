@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import {
   AlertCircle, ArrowRight, Building2, CheckCircle2, ChevronDown, ChevronRight, Copy,
-  ExternalLink, Filter, Loader2, Mail, MapPin, Pencil, Plus, RefreshCw,
+  ExternalLink, Filter, Globe, Loader2, Mail, MapPin, Pencil, Plus, RefreshCw,
   Search, Sparkles, Star, Tag, Trash2, X,
 } from 'lucide-react'
 import { TopBar } from '@/components/layout/TopBar'
@@ -172,6 +172,11 @@ export function ProspectorPage() {
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([])
   const [discovering, setDiscovering] = useState(false)
   const [equityData, setEquityData] = useState<EquityRow[]>([])
+  // URL scraper
+  const [scrapeUrl, setScrapeUrl] = useState('')
+  const [scraping, setScraping] = useState(false)
+  const [scrapedOrg, setScrapedOrg] = useState<{ name: string; type: string; county: string; description: string; contactEmail: string; website: string } | null>(null)
+  const [scrapeSaved, setScrapeSaved] = useState(false)
 
   const load = () => {
     setLoading(true)
@@ -223,6 +228,36 @@ export function ProspectorPage() {
       toast.success(`${s.name} added to pipeline`)
       load()
     } catch { toast.error('Failed to add') }
+  }
+
+  const handleScrape = async () => {
+    const url = scrapeUrl.trim()
+    if (!url) { toast.error('Enter a URL to scrape'); return }
+    setScraping(true); setScrapedOrg(null); setScrapeSaved(false)
+    try {
+      const result = await invoke<{ name: string; type: string; county: string; description: string; contactEmail: string; website: string } | null>(
+        'prospect:scrapeUrl', { url }
+      )
+      if (result) setScrapedOrg(result)
+      else toast.error('Could not extract org info — try a different URL')
+    } catch { toast.error('Scrape failed — check the URL or API key') }
+    finally { setScraping(false) }
+  }
+
+  const handleSaveScraped = async () => {
+    if (!scrapedOrg) return
+    try {
+      await invoke('prospect:create', {
+        name: scrapedOrg.name,
+        type: scrapedOrg.type || undefined,
+        county: scrapedOrg.county || undefined,
+        sourceUrl: scrapedOrg.website,
+        notes: scrapedOrg.description,
+      })
+      toast.success(`${scrapedOrg.name} added to pipeline`)
+      setScrapeSaved(true)
+      load()
+    } catch { toast.error('Failed to save') }
   }
 
   const handleScore = async (id: string) => {
@@ -468,7 +503,8 @@ export function ProspectorPage() {
         {/* ══ DISCOVER TAB ═══════════════════════════════════════════════ */}
         {tab === 'discover' && (
           <div className="max-w-3xl space-y-5">
-            {/* Hero card */}
+
+            {/* Hero + discover button */}
             <div className="bg-gradient-to-br from-brand to-[#0d4a28] rounded-2xl p-5 text-white">
               <h2 className="text-sm font-bold mb-1 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-300" />AI Prospect Discovery
@@ -476,7 +512,7 @@ export function ProspectorPage() {
               <p className="text-xs text-white/70 mb-4 leading-relaxed">
                 AI analyzes county coverage gaps and equity data to suggest specific organizations to target —
                 nonprofits, state parks, county ag programs, university extensions, and more.
-                Top 8 priority counties are used as input.
+                Top 8 highest-priority counties (ranked by burden × equity × coverage gap) are used as input.
               </p>
               <button
                 onClick={handleDiscover}
@@ -484,31 +520,54 @@ export function ProspectorPage() {
                 className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs font-medium rounded-lg border border-white/30 transition-colors disabled:opacity-50"
               >
                 {discovering ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                {discovering ? 'Analyzing gaps…' : 'Discover Prospects by Coverage Gap'}
+                {discovering ? 'Analyzing coverage gaps…' : 'Discover Prospects by Coverage Gap'}
               </button>
             </div>
 
-            {/* Priority county table */}
+            {/* Priority county breakdown table */}
             {equityData.length > 0 && (
               <div className="bg-white border border-app-border rounded-xl overflow-hidden">
-                <div className="px-4 py-2.5 bg-gray-50 border-b border-app-border flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-700">Top 8 Priority Counties — AI Discovery Input</p>
-                  <span className="text-[10px] text-gray-400">ranked by burden × equity × coverage gap</span>
+                <div className="px-4 py-2.5 bg-gray-50 border-b border-app-border">
+                  <p className="text-xs font-semibold text-gray-700">Top 8 Priority Counties — Score Breakdown</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Each score = (burden × 35%) + (Title I% × 30%) + (gap × 25%) + (rural +10)</p>
                 </div>
                 {equityData.slice(0, 8).map((row, i) => {
                   const coverageGap = Math.max(0, 100 - row.programsPerSchool * 50)
+                  const burdenC = parseFloat((row.burden * 0.35).toFixed(1))
+                  const title1C = parseFloat((row.title1Pct * 0.30).toFixed(1))
+                  const gapC    = parseFloat((coverageGap * 0.25).toFixed(1))
+                  const ruralC  = row.isRural ? 10 : 0
                   return (
-                    <div key={row.county} className="px-4 py-2.5 grid grid-cols-12 gap-2 text-xs border-b border-gray-50 last:border-0 items-center">
-                      <span className="col-span-1 text-[10px] font-bold text-gray-300">#{i + 1}</span>
-                      <span className="col-span-3 font-medium text-gray-800">{row.county}</span>
-                      <span className="col-span-2 text-gray-500">{row.programs} programs</span>
-                      <span className="col-span-2 text-gray-500">{row.schools} schools</span>
-                      <span className="col-span-2 text-gray-500">{row.title1Pct}% Title I</span>
-                      <div className="col-span-2 flex items-center gap-1">
-                        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-                          <div className="h-1.5 bg-brand rounded-full" style={{ width: `${Math.min(100, row.priority)}%` }} />
-                        </div>
-                        <span className="font-bold text-brand text-[10px] w-5 text-right">{row.priority}</span>
+                    <div key={row.county} className="px-4 py-3 border-b border-gray-50 last:border-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-bold text-brand w-5">#{i + 1}</span>
+                        <span className="text-xs font-semibold text-gray-900">{row.county} County</span>
+                        {row.isRural && <span className="text-[10px] bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-full">Rural</span>}
+                        <span className="ml-auto text-xs font-bold text-brand">{row.priority} pts</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { label: 'Burden', value: burdenC, raw: `${row.burden}/100`, color: 'bg-red-100 text-red-700' },
+                          { label: 'Title I', value: title1C, raw: `${row.title1Pct}%`, color: 'bg-orange-100 text-orange-700' },
+                          { label: 'Gap', value: gapC, raw: `${Math.round(coverageGap)}%`, color: 'bg-amber-100 text-amber-700' },
+                          { label: 'Rural', value: ruralC, raw: row.isRural ? '+10' : '—', color: 'bg-blue-50 text-blue-700' },
+                        ].map(({ label, value, raw, color }) => (
+                          <div key={label} className={`rounded-lg px-2 py-1.5 text-center ${color}`}>
+                            <p className="text-[9px] font-medium opacity-70">{label}</p>
+                            <p className="text-sm font-bold">{value}</p>
+                            <p className="text-[9px] opacity-60">{raw}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-2 text-[10px] text-gray-400">
+                        <span>{row.programs} programs · {row.schools} schools · {row.partners} partners</span>
+                        <a
+                          href={`https://www.google.com/search?q=environmental+education+nonprofit+"${encodeURIComponent(row.county + ' County')}"+California`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-0.5 text-brand hover:underline ml-auto"
+                        >
+                          <Search className="w-3 h-3" />Search orgs
+                        </a>
                       </div>
                     </div>
                   )
@@ -516,12 +575,86 @@ export function ProspectorPage() {
               </div>
             )}
 
+            {/* URL Scraper */}
+            <div className="bg-white border border-app-border rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 border-b border-app-border">
+                <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-brand" />Paste & Scrape — Extract org info from any website
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Paste an org's website URL and AI will extract their name, county, type, and contact info.
+                </p>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    value={scrapeUrl}
+                    onChange={(e) => { setScrapeUrl(e.target.value); setScrapedOrg(null); setScrapeSaved(false) }}
+                    placeholder="https://example-org.org"
+                    className="flex-1 text-xs border border-app-border rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-brand bg-white"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleScrape() }}
+                  />
+                  <button
+                    onClick={handleScrape}
+                    disabled={scraping || !scrapeUrl.trim() || !hasClaudeKey}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors"
+                  >
+                    {scraping ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    {scraping ? 'Scraping…' : 'Extract'}
+                  </button>
+                </div>
+
+                {scrapedOrg && (
+                  <div className="bg-gray-50 rounded-xl border border-gray-200 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-gray-800">{scrapedOrg.name}</p>
+                    <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-500">
+                      <span><strong>Type:</strong> {scrapedOrg.type?.replace(/_/g, ' ') || '—'}</span>
+                      <span><strong>County:</strong> {scrapedOrg.county || '—'}</span>
+                      <span className="col-span-2"><strong>Email:</strong> {scrapedOrg.contactEmail || '—'}</span>
+                      <span className="col-span-2 leading-relaxed"><strong>About:</strong> {scrapedOrg.description}</span>
+                    </div>
+                    <button
+                      onClick={handleSaveScraped}
+                      disabled={scrapeSaved}
+                      className={`flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${scrapeSaved ? 'bg-green-50 text-green-700 cursor-default' : 'bg-brand text-white hover:bg-brand-dark'}`}
+                    >
+                      {scrapeSaved ? <><CheckCircle2 className="w-3.5 h-3.5" />Added to Pipeline</> : <><Plus className="w-3.5 h-3.5" />Add to Pipeline</>}
+                    </button>
+                  </div>
+                )}
+
+                {/* Directory shortcuts */}
+                <div className="pt-1">
+                  <p className="text-[10px] text-gray-400 font-medium mb-1.5">Search these directories for leads:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      ['CA State Parks', 'https://www.parks.ca.gov/'],
+                      ['211 CA Nonprofits', 'https://www.211ca.org/'],
+                      ['CA Naturalists', 'https://ucanr.edu/sites/canat/'],
+                      ['UC Cooperative Ext.', 'https://ucanr.edu/'],
+                      ['CNPS', 'https://www.cnps.org/'],
+                    ].map(([label, href]) => (
+                      <a
+                        key={label}
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[10px] px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-brand/10 hover:text-brand transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />{label}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* AI Suggestions */}
             {suggestions.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                  AI Suggestions ({suggestions.length}) — click to add to pipeline
+                  AI Suggestions ({suggestions.length}) — add to pipeline or paste their URL above to scrape
                 </h3>
                 {suggestions.map((s, i) => (
                   <div key={i} className="bg-white border border-app-border rounded-xl p-4">
@@ -536,9 +669,24 @@ export function ProspectorPage() {
                         <p className="text-[11px] text-gray-400 flex items-center gap-1">
                           <AlertCircle className="w-3 h-3 shrink-0" />{s.sourceHint}
                         </p>
+                        <div className="flex gap-2 mt-2">
+                          <a
+                            href={`https://www.google.com/search?q="${encodeURIComponent(s.name)}"+"${encodeURIComponent(s.county)}"+California`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-[10px] px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-brand/10 hover:text-brand transition-colors"
+                          >
+                            <Search className="w-3 h-3" />Google
+                          </a>
+                          <button
+                            onClick={() => setScrapeUrl(`https://www.google.com/search?q="${s.name}"+${s.county}+California+site:*.org`)}
+                            className="flex items-center gap-1 text-[10px] px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-brand/10 hover:text-brand transition-colors"
+                          >
+                            <Globe className="w-3 h-3" />Fill URL
+                          </button>
+                        </div>
                       </div>
                       <div className="shrink-0 flex flex-col items-end gap-2">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5">
                           {[...Array(10)].map((_, j) => (
                             <Star key={j} className={`w-2.5 h-2.5 ${j < s.scoreEstimate ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
                           ))}
@@ -557,11 +705,11 @@ export function ProspectorPage() {
               </div>
             )}
 
-            {/* Empty state after discovery */}
+            {/* Empty state */}
             {!discovering && suggestions.length === 0 && equityData.length > 0 && (
               <div className="text-center py-8 text-gray-400">
                 <RefreshCw className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-xs">Click "Discover Prospects by Coverage Gap" to get AI suggestions</p>
+                <p className="text-xs">Click "Discover Prospects by Coverage Gap" to get AI-suggested organizations</p>
               </div>
             )}
           </div>

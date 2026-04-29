@@ -217,6 +217,21 @@ export class ClaudeService {
     } catch { return null }
   }
 
+  async generateAndSaveDigest(teacherId: string): Promise<string | null> {
+    const html = await this.generateDigest(teacherId)
+    if (html) {
+      const client = getRawClient()
+      const now = Math.floor(Date.now() / 1000)
+      const reportId = `rpt_${teacherId}_${now}`
+      await client.execute({
+        sql: `INSERT OR REPLACE INTO reports (id, recipient_type, recipient_id, report_type, generated_at, content_json)
+              VALUES (?, 'teacher', ?, 'monthly_digest', ?, ?)`,
+        args: [reportId, teacherId, now, JSON.stringify({ html })],
+      })
+    }
+    return html
+  }
+
   async generateAllDigests(): Promise<{ teacherId: string; success: boolean }[]> {
     const client = getRawClient()
     const teachersResult = await client.execute({ sql: `SELECT id FROM teachers ORDER BY name`, args: [] })
@@ -304,6 +319,42 @@ Respond with a JSON array only:
       const raw = text.trim()
       const jsonStr = raw.startsWith('[') ? raw : raw.slice(raw.indexOf('['))
       return JSON.parse(jsonStr)
+    } catch { return null }
+  }
+
+  async scrapeAndExtractOrg(url: string): Promise<{ name: string; type: string; county: string; description: string; contactEmail: string; website: string } | null> {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TenStrands/1.0)' }, signal: AbortSignal.timeout(8000) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const html = await res.text()
+      // Strip tags, keep first 3000 chars for context
+      const text = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .slice(0, 3000)
+
+      const result = await this.completeText(
+        'You extract organization profile info from website text. Return only JSON.',
+        `Extract information about this environmental education organization from their website text.
+
+Website URL: ${url}
+Content: ${text}
+
+Return JSON only (use null for missing fields):
+{
+  "name": "Organization name",
+  "type": "wetlands|agriculture|urban_ecology|climate_justice|indigenous_knowledge|general",
+  "county": "California county (or null)",
+  "description": "1-2 sentence description of their mission and programs",
+  "contactEmail": "contact email or null",
+  "website": "${url}"
+}`,
+        400
+      )
+      if (!result) return null
+      const raw = result.trim()
+      return JSON.parse(raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{')))
     } catch { return null }
   }
 

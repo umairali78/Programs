@@ -14,6 +14,7 @@ import { LessonPlansPage } from '@/views/LessonPlans/LessonPlansPage'
 import { ProspectorPage } from '@/views/Prospector/ProspectorPage'
 import { OnboardingPage } from '@/views/Onboarding/OnboardingPage'
 import { EquityPage } from '@/views/Equity/EquityPage'
+import { DigestsPage } from '@/views/Digests/DigestsPage'
 import { useAppStore } from '@/store/app.store'
 import { invoke } from '@/lib/api'
 import { Toaster } from 'sonner'
@@ -27,7 +28,7 @@ export default function App() {
       // /api/init creates tables + seeds demo in one server-side batch call
       await fetch('/api/init', { method: 'POST' })
       const settings = await invoke<Record<string, string>>('settings:getAll').catch(() => ({} as Record<string, string>))
-      setHasClaudeKey(!!(settings.claude_api_key?.trim()))
+      setHasClaudeKey(!!(settings.claude_api_key?.trim() || settings.openai_api_key?.trim()))
       if (settings.active_teacher_id) {
         const teacher = await invoke<any>('teacher:get', { id: settings.active_teacher_id }).catch(() => null)
         if (teacher) setActiveTeacher(teacher)
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/prospector" element={<ProspectorPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/equity" element={<EquityPage />} />
+            <Route path="/digests" element={<DigestsPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

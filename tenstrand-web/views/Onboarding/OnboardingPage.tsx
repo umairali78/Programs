@@ -47,6 +47,16 @@ export function OnboardingPage() {
 
   const completedCount = FIELDS.filter(f => collectedData[f.key]).length
 
+  const triggerBuildProfile = async (data: Record<string, string>) => {
+    setBuildingProfile(true)
+    try {
+      const built = await invoke<ProfilePreview | null>('onboarding:buildProfile', { data })
+      if (built) { setProfile(built); setStage('preview') }
+      else toast.error('Could not build profile — please try again')
+    } catch { toast.error('Profile build failed — check your API key in Settings') }
+    finally { setBuildingProfile(false) }
+  }
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || sending) return
@@ -67,12 +77,7 @@ export function OnboardingPage() {
       setMessages([...newMessages, { role: 'assistant', content: result.reply }])
 
       if (result.complete) {
-        setBuildingProfile(true)
-        try {
-          const built = await invoke<ProfilePreview | null>('onboarding:buildProfile', { data: merged })
-          if (built) { setProfile(built); setStage('preview') }
-          else toast.error('Could not build profile — please try again')
-        } finally { setBuildingProfile(false) }
+        await triggerBuildProfile(merged)
       }
     } catch { toast.error('AI unavailable — configure an API key in Settings') }
     finally { setSending(false) }
@@ -155,9 +160,9 @@ export function OnboardingPage() {
                   style={{ width: `${(completedCount / FIELDS.length) * 100}%` }}
                 />
               </div>
-              {completedCount === FIELDS.length && (
+              {completedCount === FIELDS.length && !buildingProfile && (
                 <p className="text-[10px] text-green-600 mt-1.5 font-medium flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" />All fields collected — building profile…
+                  <CheckCircle2 className="w-3 h-3" />All fields collected!
                 </p>
               )}
             </div>
@@ -196,10 +201,26 @@ export function OnboardingPage() {
               })}
             </div>
 
-            {/* Footer tip */}
-            <div className="p-3 border-t border-app-border bg-white">
+            {/* Footer: build profile button OR tip */}
+            <div className="p-3 border-t border-app-border bg-white space-y-2">
+              {completedCount >= 7 && (
+                <button
+                  onClick={() => triggerBuildProfile(collectedData)}
+                  disabled={buildingProfile || sending}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-brand text-white text-xs font-semibold rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors"
+                >
+                  {buildingProfile
+                    ? <><Loader2 className="w-3 h-3 animate-spin" />Building…</>
+                    : <><Sparkles className="w-3 h-3" />Build Profile Now</>}
+                </button>
+              )}
               <p className="text-[10px] text-gray-400 leading-snug">
                 Answers are saved as you go. You can provide multiple pieces of information in one message.
+                {completedCount >= 7 && completedCount < FIELDS.length && (
+                  <span className="block mt-1 text-brand font-medium">
+                    {FIELDS.length - completedCount} field(s) remaining — or build profile with current data.
+                  </span>
+                )}
               </p>
             </div>
           </div>
