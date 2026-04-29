@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
-import { Database, Upload, RefreshCw, CheckCircle, AlertCircle, Sparkles, Trash2, Mail, Download } from 'lucide-react'
+import { Database, Upload, RefreshCw, CheckCircle, AlertCircle, Sparkles, Trash2, Mail, Download, Map } from 'lucide-react'
 import { invoke } from '@/lib/api'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store/app.store'
@@ -17,8 +17,10 @@ const ENTITY_FIELDS: Record<ImportEntity, { key: string; label: string }[]> = {
   districts: [{ key: 'name', label: 'Name *' }, { key: 'county', label: 'County' }, { key: 'superintendent_email', label: 'Supt. Email' }, { key: 'enrollment_total', label: 'Total Enrollment' }]
 }
 
+interface EquityRow { county: string; programs: number; schools: number; enrollment: number; title1Pct: number; programsPerSchool: number; burden: number; isRural: boolean; priority: number }
+
 export function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'demo' | 'import' | 'database' | 'digests'>('demo')
+  const [activeTab, setActiveTab] = useState<'demo' | 'import' | 'database' | 'digests' | 'equity'>('demo')
   const { setActiveTeacher } = useAppStore()
 
   const [demoLoaded, setDemoLoaded] = useState(false)
@@ -48,15 +50,30 @@ export function AdminPage() {
     finally { setClearingDemo(false) }
   }
 
-  // Digests
+  // Digests — per-teacher sequential calls to avoid serverless timeout
   const [generatingDigests, setGeneratingDigests] = useState(false)
-  const [digestResults, setDigestResults] = useState<{ teacherId: string; success: boolean }[] | null>(null)
+  const [digestProgress, setDigestProgress] = useState<{ done: number; total: number; current: string }>({ done: 0, total: 0, current: '' })
+  const [digestResults, setDigestResults] = useState<{ name: string; success: boolean }[] | null>(null)
 
   const handleGenerateDigests = async () => {
     setGeneratingDigests(true); setDigestResults(null)
     try {
-      const results = await invoke<{ teacherId: string; success: boolean }[]>('admin:generateAllDigests')
+      const teachers = await invoke<{ id: string; name: string }[]>('teacher:list')
+      if (!teachers.length) { toast.error('No teachers found'); return }
+      setDigestProgress({ done: 0, total: teachers.length, current: teachers[0]?.name ?? '' })
+      const results: { name: string; success: boolean }[] = []
+      for (let i = 0; i < teachers.length; i++) {
+        const t = teachers[i]
+        setDigestProgress({ done: i, total: teachers.length, current: t.name })
+        try {
+          const digest = await invoke<string | null>('ai:generateDigest', { teacherId: t.id })
+          results.push({ name: t.name, success: !!digest })
+        } catch {
+          results.push({ name: t.name, success: false })
+        }
+      }
       setDigestResults(results)
+      setDigestProgress({ done: teachers.length, total: teachers.length, current: '' })
       const succeeded = results.filter((r) => r.success).length
       toast.success(`Generated ${succeeded} of ${results.length} digests`)
     } catch (err: any) { toast.error('Failed: ' + err.message) }
@@ -90,6 +107,10 @@ export function AdminPage() {
 
   const [dbStats, setDbStats] = useState<any>(null)
   const [loadingStats, setLoadingStats] = useState(false)
+
+  // Equity
+  const [equityData, setEquityData] = useState<EquityRow[]>([])
+  const [loadingEquity, setLoadingEquity] = useState(false)
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -134,12 +155,15 @@ export function AdminPage() {
   const loadDbStats = async () => { setLoadingStats(true); try { const stats = await invoke('admin:dbStats'); setDbStats(stats) } finally { setLoadingStats(false) } }
   useEffect(() => { if (activeTab === 'database') loadDbStats() }, [activeTab])
 
+  const loadEquity = async () => { setLoadingEquity(true); try { const data = await invoke<EquityRow[]>('insights:equityCoverage'); setEquityData(data) } finally { setLoadingEquity(false) } }
+  useEffect(() => { if (activeTab === 'equity') loadEquity() }, [activeTab])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <TopBar title="Admin" />
-      <div className="flex border-b border-app-border bg-white px-6">
-        {([['demo', 'Demo Data', Sparkles], ['import', 'CSV Import', Upload], ['database', 'Database', Database], ['digests', 'Digests & Export', Mail]] as const).map(([tab, label, Icon]) => (
-          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+      <div className="flex border-b border-app-border bg-white px-6 overflow-x-auto">
+        {([['demo', 'Demo Data', Sparkles], ['import', 'CSV Import', Upload], ['database', 'Database', Database], ['digests', 'Digests & Export', Mail], ['equity', 'Equity Map', Map]] as const).map(([tab, label, Icon]) => (
+          <button key={tab} onClick={() => setActiveTab(tab as any)} className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === tab ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
             <Icon className="w-3.5 h-3.5" />{label}
           </button>
         ))}
@@ -273,18 +297,96 @@ export function AdminPage() {
           </div>
         )}
 
+        {activeTab === 'equity' && (
+          <div className="max-w-4xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">Equity & Coverage Map</h3>
+                <p className="text-xs text-gray-500 mt-0.5">County-level coverage gaps scored against CalEnviroScreen burden, Title I school density, and rural access. Higher priority = more underserved.</p>
+              </div>
+              <button onClick={loadEquity} className="flex items-center gap-1 text-xs text-gray-500 hover:text-brand"><RefreshCw className={`w-3 h-3 ${loadingEquity ? 'animate-spin' : ''}`} />Refresh</button>
+            </div>
+
+            {loadingEquity ? (
+              <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+            ) : equityData.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-8">No school or partner data available yet — load demo data or import schools.</p>
+            ) : (
+              <>
+                {/* Priority legend */}
+                <div className="flex items-center gap-4 text-[10px] text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" />High priority (70+)</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-amber-400 inline-block" />Medium (45–69)</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-400 inline-block" />Lower priority (&lt;45)</span>
+                </div>
+
+                <div className="border border-app-border rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 grid grid-cols-7 gap-2 text-[10px] font-semibold text-gray-500 border-b border-app-border">
+                    <span className="col-span-2">County</span>
+                    <span>Programs</span>
+                    <span>Schools</span>
+                    <span>Title I %</span>
+                    <span>Burden</span>
+                    <span>Priority</span>
+                  </div>
+                  {equityData.slice(0, 30).map((row) => {
+                    const priorityColor = row.priority >= 70 ? 'bg-red-400' : row.priority >= 45 ? 'bg-amber-400' : 'bg-green-400'
+                    return (
+                      <div key={row.county} className="px-4 py-2.5 grid grid-cols-7 gap-2 text-xs border-b border-gray-50 last:border-0 items-center hover:bg-gray-50">
+                        <div className="col-span-2 flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-sm shrink-0 ${priorityColor}`} />
+                          <span className="font-medium text-gray-800">{row.county}</span>
+                          {row.isRural && <span className="text-[9px] text-blue-500 bg-blue-50 px-1 rounded">rural</span>}
+                        </div>
+                        <span className="text-gray-600">{row.programs}</span>
+                        <span className="text-gray-600">{row.schools}</span>
+                        <span className={`font-medium ${row.title1Pct >= 60 ? 'text-red-600' : row.title1Pct >= 30 ? 'text-amber-600' : 'text-gray-600'}`}>{row.title1Pct}%</span>
+                        <div className="flex items-center gap-1">
+                          <div className="flex-1 bg-gray-100 rounded-full h-1">
+                            <div className="h-1 bg-orange-400 rounded-full" style={{ width: `${Math.min(100, row.burden)}%` }} />
+                          </div>
+                          <span className="text-[10px] text-gray-500 w-5 text-right">{row.burden}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                            <div className={`h-1.5 rounded-full ${priorityColor}`} style={{ width: `${Math.min(100, row.priority)}%` }} />
+                          </div>
+                          <span className="text-[10px] font-bold text-gray-700 w-6 text-right">{row.priority}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  Priority score = 35% CalEnviroScreen burden + 30% Title I school % + 25% program coverage gap + 10% rural bonus.
+                  CalEnviroScreen data based on California OEHHA public estimates. Use this table to feed targeting priorities into the Intelligent Prospector.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === 'digests' && (
           <div className="max-w-2xl space-y-6">
             <div>
               <h3 className="text-sm font-semibold text-gray-900 mb-1">Monthly Digest Generation</h3>
-              <p className="text-xs text-gray-500 leading-relaxed">Generate personalized monthly digest emails for all teachers. Digests summarise nearby programs and are stored in the database for retrieval. Requires an AI API key in Settings.</p>
+              <p className="text-xs text-gray-500 leading-relaxed">Generate personalized monthly digest emails for all teachers. Each digest summarises nearby programs matching the teacher's profile. Requires a Claude or OpenAI API key configured in Settings.</p>
             </div>
             <div>
               <button onClick={handleGenerateDigests} disabled={generatingDigests} className="flex items-center gap-1.5 px-4 py-2 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors">
                 {generatingDigests ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
-                {generatingDigests ? 'Generating…' : 'Generate All Digests'}
+                {generatingDigests ? `Generating… (${digestProgress.done}/${digestProgress.total})` : 'Generate All Digests'}
               </button>
             </div>
+            {generatingDigests && digestProgress.total > 0 && (
+              <div className="space-y-2">
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="h-2 bg-brand rounded-full transition-all" style={{ width: `${Math.round((digestProgress.done / digestProgress.total) * 100)}%` }} />
+                </div>
+                <p className="text-xs text-gray-500">Processing: {digestProgress.current} ({digestProgress.done}/{digestProgress.total})</p>
+              </div>
+            )}
             {digestResults && (
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
@@ -298,7 +400,10 @@ export function AdminPage() {
                   </div>
                 </div>
                 {digestResults.filter((r) => !r.success).length > 0 && (
-                  <p className="text-xs text-red-600 bg-red-50 rounded-lg p-3">Some digests failed — check that an AI API key is configured in Settings.</p>
+                  <div className="text-xs text-red-600 bg-red-50 rounded-lg p-3 space-y-1">
+                    <p className="font-medium">Failed teachers (check AI API key in Settings):</p>
+                    {digestResults.filter((r) => !r.success).map((r) => <p key={r.name}>· {r.name}</p>)}
+                  </div>
                 )}
               </div>
             )}

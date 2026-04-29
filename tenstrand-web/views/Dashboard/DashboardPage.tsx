@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   BookOpen, Bookmark, CheckCircle2, ChevronRight, Compass, DollarSign,
-  GraduationCap, HandHeart, Loader2, Map, MapPin, Quote, School, Send,
+  GraduationCap, HandHeart, Info, Loader2, Map, MapPin, Quote, School, Send,
   Sparkles, Star, Trees, Users, X, XCircle,
 } from 'lucide-react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -114,6 +114,84 @@ function ScorePip({ label, value, icon: Icon, color }: { label: string; value: n
   )
 }
 
+function criteriaLabel(value: number, type: 'geo' | 'grade' | 'subject' | 'season'): { label: string; detail: string; color: string } {
+  const pct = Math.round(value * 100)
+  if (type === 'geo') {
+    if (pct >= 90) return { label: 'Very close', detail: 'Program is within ~5 miles of your school', color: 'text-green-700' }
+    if (pct >= 70) return { label: 'Nearby', detail: 'Program is within ~10 miles', color: 'text-green-600' }
+    if (pct >= 50) return { label: 'Moderate distance', detail: 'Program is within ~20 miles', color: 'text-amber-600' }
+    return { label: 'Further away', detail: 'Program is more than 20 miles from your school', color: 'text-red-600' }
+  }
+  if (type === 'grade') {
+    if (pct >= 95) return { label: 'Perfect match', detail: 'All your grade levels are covered by this program', color: 'text-green-700' }
+    if (pct >= 60) return { label: 'Good alignment', detail: 'Most of your grade levels overlap with this program', color: 'text-green-600' }
+    if (pct >= 30) return { label: 'Partial overlap', detail: 'Some grade levels match — check program details', color: 'text-amber-600' }
+    return { label: 'Limited overlap', detail: 'Few grade levels align — verify suitability', color: 'text-red-600' }
+  }
+  if (type === 'subject') {
+    if (pct >= 95) return { label: 'Perfect match', detail: 'All your subject interests are covered', color: 'text-green-700' }
+    if (pct >= 60) return { label: 'Strong alignment', detail: 'Most subjects in your profile match this program', color: 'text-green-600' }
+    if (pct >= 30) return { label: 'Partial alignment', detail: 'Some subject overlap — program may still be useful', color: 'text-amber-600' }
+    return { label: 'Low alignment', detail: 'Few subjects match — set your subjects in Settings to improve this', color: 'text-red-600' }
+  }
+  // season
+  if (pct >= 70) return { label: 'Good season fit', detail: 'Program runs during seasons you are typically active', color: 'text-green-600' }
+  if (pct >= 40) return { label: 'Partial season fit', detail: 'Program partially overlaps with your schedule', color: 'text-amber-600' }
+  return { label: 'Season unclear', detail: 'Season info not available or does not overlap', color: 'text-gray-500' }
+}
+
+function CriteriaPopover({ match, onClose }: { match: MatchResult; onClose: () => void }) {
+  const sb = match.scoreBreakdown
+  if (!sb) return null
+  const criteria = [
+    { key: 'geo' as const, icon: MapPin, label: 'Proximity', value: sb.geo, color: 'text-green-600' },
+    { key: 'grade' as const, icon: GraduationCap, label: 'Grade alignment', value: sb.grade, color: 'text-blue-600' },
+    { key: 'subject' as const, icon: BookOpen, label: 'Subject alignment', value: sb.subject, color: 'text-purple-600' },
+    { key: 'season' as const, icon: Star, label: 'Season fit', value: sb.season, color: 'text-amber-600' },
+  ]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">Why this program?</h3>
+            <p className="text-xs text-gray-400 mt-0.5">{match.partnerName} · {match.title}</p>
+          </div>
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          {criteria.map(({ key, icon: Icon, label, value }) => {
+            const c = criteriaLabel(value, key)
+            const pct = Math.round(value * 100)
+            return (
+              <div key={key}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-1.5 text-xs font-medium text-gray-700">
+                    <Icon className={`w-3.5 h-3.5 ${c.color}`} />{label}
+                  </span>
+                  <span className={`text-xs font-bold ${c.color}`}>{pct}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-1.5 mb-1">
+                  <div className="h-1.5 rounded-full bg-brand transition-all" style={{ width: `${pct}%` }} />
+                </div>
+                <p className="text-[11px] text-gray-500">{c.detail}</p>
+              </div>
+            )
+          })}
+          <div className="border-t border-gray-100 pt-3 mt-3">
+            <p className="text-[11px] text-gray-400 leading-relaxed">
+              Overall score: <span className="font-semibold text-gray-700">{Math.round(match.score * 100)}%</span>.
+              {sb.grade === 0 && ' · Set your grade levels in Settings to improve grade alignment.'}
+              {sb.subject === 0 && ' · Add your subject interests in Settings to improve subject matching.'}
+              {match.distanceMiles == null && ' · Add your school location in Settings to enable proximity scoring.'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
   match: MatchResult
   interested: boolean
@@ -121,6 +199,7 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
   onRemoveInterest: (programId: string) => void
 }) {
   const [removing, setRemoving] = useState(false)
+  const [showCriteria, setShowCriteria] = useState(false)
   const sb = match.scoreBreakdown
 
   const handleRemove = async () => {
@@ -139,12 +218,16 @@ function MatchCard({ match, interested, onExpressInterest, onRemoveInterest }: {
         </div>
         <div className="shrink-0 flex flex-col items-end gap-0.5">
           <div className="flex items-center gap-1">
+            <button onClick={() => setShowCriteria(true)} title="Why was this recommended?" className="p-1 rounded-full hover:bg-amber-50 text-gray-300 hover:text-amber-500 transition-colors">
+              <Info className="w-3.5 h-3.5" />
+            </button>
             <Sparkles className="w-3 h-3 text-amber-500" />
             <span className="text-xl font-bold text-gray-900 leading-none">{scoreToPercent(match.score)}%</span>
           </div>
           <p className="text-[10px] text-gray-400">match score</p>
         </div>
       </div>
+      {showCriteria && <CriteriaPopover match={match} onClose={() => setShowCriteria(false)} />}
 
       {match.description && <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{match.description}</p>}
 

@@ -290,6 +290,72 @@ export class InsightsService {
     }
   }
 
+  async getEquityCoverage() {
+    const client = getRawClient()
+    const [countyPrograms, countySchools] = await Promise.all([
+      client.execute(`
+        SELECT pa.county, COUNT(DISTINCT p.id) as programs, COUNT(DISTINCT pa.id) as partners
+        FROM partners pa
+        LEFT JOIN programs p ON p.partner_id = pa.id
+        WHERE pa.county IS NOT NULL AND pa.status = 'active'
+        GROUP BY pa.county
+      `),
+      client.execute(`
+        SELECT county, COUNT(*) as schools,
+               SUM(title1_flag) as title1_schools,
+               COALESCE(SUM(enrollment), 0) as enrollment
+        FROM schools WHERE county IS NOT NULL
+        GROUP BY county
+      `),
+    ])
+
+    // CalEnviroScreen burden index (0-100, higher = more burdened) — public data estimates
+    const enviroScreen: Record<string, number> = {
+      'Kern': 88, 'Fresno': 85, 'Kings': 80, 'Tulare': 79, 'Madera': 75,
+      'Merced': 73, 'San Bernardino': 68, 'Stanislaus': 65, 'San Joaquin': 64,
+      'Los Angeles': 61, 'Riverside': 58, 'Alameda': 55, 'Imperial': 82,
+      'Colusa': 60, 'Sutter': 58, 'Yolo': 50, 'Sacramento': 52,
+      'San Diego': 40, 'Ventura': 38, 'Orange': 35, 'Contra Costa': 48,
+      'Santa Clara': 32, 'San Francisco': 45, 'San Mateo': 28,
+      'Marin': 20, 'Santa Cruz': 30, 'Monterey': 48, 'Santa Barbara': 35,
+      'Trinity': 55, 'Siskiyou': 50, 'Del Norte': 62, 'Lassen': 48,
+      'Modoc': 45, 'Alpine': 30, 'Plumas': 40, 'Sierra': 35, 'Inyo': 38, 'Mono': 33,
+      'Shasta': 52, 'Tehama': 55, 'Glenn': 58, 'Butte': 50, 'Nevada': 35, 'Placer': 28,
+      'El Dorado': 30, 'Amador': 38, 'Calaveras': 40, 'Tuolumne': 42,
+      'Mendocino': 50, 'Lake': 55, 'Humboldt': 45, 'Napa': 32, 'Sonoma': 35,
+      'Solano': 48, 'San Luis Obispo': 30, 'San Benito': 52, 'Mariposa': 40,
+    }
+
+    // Rural classification
+    const ruralCounties = new Set(['Alpine','Lassen','Modoc','Trinity','Siskiyou','Del Norte','Plumas','Sierra','Inyo','Mono','Colusa','Glenn','Tehama','Lake','Mendocino','Humboldt','Mariposa','Tuolumne','Calaveras','Amador'])
+
+    const schoolMap: Record<string, { schools: number; title1: number; enrollment: number }> = {}
+    for (const r of countySchools.rows) {
+      schoolMap[r.county as string] = { schools: Number(r.schools), title1: Number(r.title1_schools ?? 0), enrollment: Number(r.enrollment) }
+    }
+    const programMap: Record<string, { programs: number; partners: number }> = {}
+    for (const r of countyPrograms.rows) {
+      programMap[r.county as string] = { programs: Number(r.programs), partners: Number(r.partners) }
+    }
+
+    // Collect all counties from both datasets
+    const allCounties = new Set([...Object.keys(schoolMap), ...Object.keys(programMap)])
+    const results = Array.from(allCounties).map((county) => {
+      const s = schoolMap[county] ?? { schools: 0, title1: 0, enrollment: 0 }
+      const p = programMap[county] ?? { programs: 0, partners: 0 }
+      const title1Pct = s.schools > 0 ? Math.round((s.title1 / s.schools) * 100) : 0
+      const programsPerSchool = s.schools > 0 ? +(p.programs / s.schools).toFixed(2) : 0
+      const burden = enviroScreen[county] ?? 40
+      const isRural = ruralCounties.has(county)
+      // Priority = high burden + high title1 + low coverage + rural bonus
+      const coverageGap = Math.max(0, 100 - programsPerSchool * 50)
+      const priority = Math.round((burden * 0.35) + (title1Pct * 0.3) + (coverageGap * 0.25) + (isRural ? 10 : 0))
+      return { county, programs: p.programs, partners: p.partners, schools: s.schools, enrollment: s.enrollment, title1Pct, programsPerSchool, burden, isRural, priority }
+    })
+
+    return results.sort((a, b) => b.priority - a.priority)
+  }
+
   private partnerTypeName(type: string): string {
     const names: Record<string, string> = {
       wetlands: 'Wetlands',

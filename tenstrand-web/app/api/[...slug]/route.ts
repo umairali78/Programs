@@ -187,6 +187,8 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await insightsSvc.getTopPrograms(body.limit ?? 5))
     case 'insights:countyCoverage':
       return ok(await insightsSvc.getCountyCoverage())
+    case 'insights:equityCoverage':
+      return ok(await insightsSvc.getEquityCoverage())
     case 'insights:districtAnalytics':
       return ok(await insightsSvc.getDistrictAnalytics())
     case 'insights:teacherOpportunity':
@@ -274,6 +276,16 @@ async function dispatch(channel: string, body: any): Promise<NextResponse> {
       return ok(await claudeSvc.generateOutreachEmail(body.prospectId))
     case 'prospect:score':
       return ok(await claudeSvc.scoreProspect(body.prospectId))
+    case 'prospect:discover':
+      return ok(await claudeSvc.discoverProspects(body.coverageGaps))
+
+    // ── Onboarding ────────────────────────────────────────────────────────────
+    case 'onboarding:turn':
+      return ok(await claudeSvc.onboardingTurn(body.history, body.message, body.collectedData ?? {}))
+    case 'onboarding:buildProfile':
+      return ok(await claudeSvc.buildPartnerProfileFromOnboarding(body.data))
+    case 'onboarding:createPartner':
+      return ok(await partnerSvc.create(body))
 
     // ── Batch admin ───────────────────────────────────────────────────────────
     case 'admin:generateAllDigests':

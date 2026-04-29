@@ -268,6 +268,118 @@ export class ClaudeService {
     } catch { return null }
   }
 
+  async discoverProspects(coverageGaps: { county: string; programs: number; schools: number; title1Pct: number; burden: number }[]): Promise<{ name: string; type: string; county: string; rationale: string; scoreEstimate: number; sourceHint: string }[] | null> {
+    const gapSummary = coverageGaps.slice(0, 8).map(g =>
+      `${g.county} County: ${g.programs} programs, ${g.schools} schools, ${g.title1Pct}% Title I, burden score ${g.burden}/100`
+    ).join('\n')
+
+    try {
+      const text = await this.completeText(
+        `You are a partnership development specialist for Ten Strands, California's outdoor environmental education network. You identify community-based organizations that could become Climate Learning Exchange partners.`,
+        `Based on coverage gaps in California counties, suggest 6 specific types of organizations to prospect as new CBP partners.
+
+Coverage gaps (high-priority counties):
+${gapSummary}
+
+Suggest organizations from these source types:
+- State parks/nature reserves
+- County farm bureaus & ag programs
+- Nonprofits (wetlands, conservation, urban ecology)
+- University extension programs
+- Indigenous cultural orgs with land stewardship programs
+- Water districts with education programs
+
+Respond with a JSON array only:
+[{
+  "name": "Example Organization Name",
+  "type": "wetlands|agriculture|urban_ecology|climate_justice|indigenous_knowledge|general",
+  "county": "County name",
+  "rationale": "Why this org would be valuable — 1 sentence mentioning the county gap",
+  "scoreEstimate": 7,
+  "sourceHint": "Where to find them, e.g., CA State Parks directory, nonprofit registry"
+}]`,
+        900
+      )
+      if (!text) return null
+      const raw = text.trim()
+      const jsonStr = raw.startsWith('[') ? raw : raw.slice(raw.indexOf('['))
+      return JSON.parse(jsonStr)
+    } catch { return null }
+  }
+
+  async onboardingTurn(history: CopilotMessage[], userMessage: string, collectedData: Record<string, string>): Promise<{ reply: string; updatedData: Record<string, string>; complete: boolean }> {
+    const fields = ['orgName', 'description', 'programs', 'gradeLevels', 'subjects', 'county', 'address', 'contactEmail', 'website']
+    const missing = fields.filter(f => !collectedData[f])
+
+    const systemPrompt = `You are a friendly onboarding specialist for Ten Strands Climate Learning Exchange. You help community-based environmental education organizations join as partners.
+
+Your job: have a natural conversation to collect these details:
+1. Organization name (orgName)
+2. What the org does / description (description)
+3. What educational programs they offer (programs)
+4. Grade levels they serve (gradeLevels — e.g., 4,5,6)
+5. Subject focus areas (subjects — from: Life Science, Earth Science, Agriculture, Water, Biodiversity, Climate Justice, Indigenous Ecological Knowledge)
+6. County they operate in (county)
+7. Physical address (address)
+8. Contact email (contactEmail)
+9. Website URL (website)
+
+Collected so far: ${JSON.stringify(collectedData)}
+Still needed: ${missing.join(', ')}
+
+Ask for ONE piece of information at a time in a friendly, conversational way. If you have all the info, say "Great! I have everything I need to create your profile." and set complete to true.
+
+Always respond with valid JSON: {"reply": "your message", "updatedData": {}, "complete": false}
+Extract any info from the user's message and add it to updatedData. Only include fields you extracted from THIS message.`
+
+    try {
+      const transcript = history.map(m => `${m.role === 'user' ? 'CBP' : 'Assistant'}: ${m.content}`).join('\n')
+      const text = await this.completeText(
+        systemPrompt,
+        `${transcript ? transcript + '\n\n' : ''}CBP: ${userMessage}`,
+        600
+      )
+      if (!text) return { reply: 'AI is unavailable. Please configure an API key in Settings.', updatedData: {}, complete: false }
+      const raw = text.trim()
+      const jsonStr = raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{'))
+      return JSON.parse(jsonStr)
+    } catch {
+      return { reply: 'Sorry, I had trouble understanding that. Could you try again?', updatedData: {}, complete: false }
+    }
+  }
+
+  async buildPartnerProfileFromOnboarding(data: Record<string, string>): Promise<{ name: string; description: string; type: string; gradeLevels: string[]; subjects: string[]; county: string; address: string; contactEmail: string; website: string } | null> {
+    try {
+      const text = await this.completeText(
+        'You extract and normalize partner profile data from onboarding interview notes.',
+        `Based on this onboarding interview data, produce a clean partner profile JSON.
+
+Interview data: ${JSON.stringify(data)}
+
+Valid types: wetlands, agriculture, urban_ecology, climate_justice, indigenous_knowledge, general
+Valid subjects: Life Science, Earth Science, Agriculture, Water, Biodiversity, Climate Justice, Indigenous Ecological Knowledge
+Valid grade levels: TK, K, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+
+Respond with JSON only:
+{
+  "name": "...",
+  "description": "2-3 sentences, engaging, teacher-focused",
+  "type": "...",
+  "gradeLevels": ["4","5","6"],
+  "subjects": ["Life Science"],
+  "county": "...",
+  "address": "...",
+  "contactEmail": "...",
+  "website": "..."
+}`,
+        600
+      )
+      if (!text) return null
+      const raw = text.trim()
+      return JSON.parse(raw.startsWith('{') ? raw : raw.slice(raw.indexOf('{')))
+    } catch { return null }
+  }
+
   private parseJson(value: string | null | undefined): string[] {
     if (!value) return []
     try { return JSON.parse(value) } catch { return [] }
