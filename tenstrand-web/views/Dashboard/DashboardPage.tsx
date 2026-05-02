@@ -2,11 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BarChart, Bar, CartesianGrid, Cell, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts'
-import {
-  BookOpen, Bookmark, CheckCircle2, ChevronRight, Compass, DollarSign,
+  BookOpen, Bookmark, CheckCircle2, Compass, DollarSign,
   GraduationCap, HandHeart, Info, Loader2, Map, MapPin, Quote, School, Send,
   Sparkles, Star, Trees, Users, X, XCircle,
 } from 'lucide-react'
@@ -18,19 +14,14 @@ import { formatCost, formatDistance, parseJsonArray, scoreToPercent } from '@/li
 import { toast } from 'sonner'
 
 interface Overview { partners: number; programs: number; teachers: number; schools: number; districts: number; activePartners: number; freePrograms: number; geocodedPartners: number }
-interface ChartDatum { subject?: string; grade?: string; type?: string; label?: string; count: number }
 interface ScoreBreakdown { geo: number; grade: number; subject: number; standards: number; season: number; engagement: number }
 interface MatchResult { programId: string; partnerName: string; title: string; description: string | null; cost: number | null; score: number; distanceMiles: number | null; gradeLevels: string[]; subjects: string[]; season: string[]; scoreBreakdown?: ScoreBreakdown }
-interface TopProgram { id: string; title: string; partner_name: string; bookmark_count: number; engagement_count: number }
-interface CountyCoverage { county: string; partners: number; programs: number }
 interface TeacherOpportunity { matchedPrograms: number; reachableStudents: number; schoolName: string | null; nearbySchools: number }
 interface TeacherOption { id: string; name: string; email: string | null; gradeLevels: string | null; subjects: string | null; lat: number | null; lng: number | null }
 interface InterestRow { program_id: string; program_title: string; program_description: string | null; partner_name: string; partner_type: string; grade_levels: string | null; subjects: string | null; cost: number | null; created_at: number; message: string | null }
 interface BookmarkRow { id: string; program_id: string; title: string; description: string | null; grade_levels: string | null; subjects: string | null; cost: number | null; partner_name: string }
 interface PeerRec { id: string; title: string; description: string | null; grade_levels: string | null; subjects: string | null; cost: number | null; partner_name: string; peer_bookmark_count: number }
 interface SpotlightReview { text: string; rating: number; teacher_name: string; grade_levels: string | null; program_title: string; partner_name: string }
-
-const COLORS = ['#1B6B3A', '#2563EB', '#C2410C', '#7C3AED', '#0F766E', '#B91C1C']
 
 // ── Interest modal ────────────────────────────────────────────────────────────
 function InterestModal({
@@ -318,11 +309,6 @@ export function DashboardPage() {
   const setActiveTeacher = useAppStore((s) => s.setActiveTeacher)
 
   const [overview, setOverview] = useState<Overview | null>(null)
-  const [subjects, setSubjects] = useState<ChartDatum[]>([])
-  const [grades, setGrades] = useState<ChartDatum[]>([])
-  const [types, setTypes] = useState<ChartDatum[]>([])
-  const [topPrograms, setTopPrograms] = useState<TopProgram[]>([])
-  const [counties, setCounties] = useState<CountyCoverage[]>([])
   const [matches, setMatches] = useState<MatchResult[]>([])
   const [opportunity, setOpportunity] = useState<TeacherOpportunity | null>(null)
   const [interests, setInterests] = useState<InterestRow[]>([])
@@ -371,11 +357,6 @@ export function DashboardPage() {
 
     const shared = [
       invoke<Overview>('insights:overview'),
-      invoke<ChartDatum[]>('insights:programsBySubject'),
-      invoke<ChartDatum[]>('insights:programsByGrade'),
-      invoke<ChartDatum[]>('insights:partnerTypes'),
-      invoke<TopProgram[]>('insights:topPrograms', { limit: 5 }),
-      invoke<CountyCoverage[]>('insights:countyCoverage'),
       invoke<SpotlightReview | null>('review:spotlight').catch(() => null),
     ]
 
@@ -398,10 +379,9 @@ export function DashboardPage() {
     ]
 
     Promise.all([...shared, ...teacherSpecific])
-      .then(([o, s, g, t, top, c, spot, m, opp, ints, iset, bmarks, bids, precs]) => {
+      .then(([o, spot, m, opp, ints, iset, bmarks, bids, precs]) => {
         if (cancelled) return
-        setOverview(o as Overview); setSubjects(s as ChartDatum[]); setGrades(g as ChartDatum[]); setTypes(t as ChartDatum[])
-        setTopPrograms(top as TopProgram[]); setCounties(c as CountyCoverage[])
+        setOverview(o as Overview)
         setSpotlight(spot as SpotlightReview | null)
         setMatches((m as MatchResult[]).slice(0, 8))
         setOpportunity(opp as TeacherOpportunity | null)
@@ -678,84 +658,11 @@ export function DashboardPage() {
         {/* ── Network stats ────────────────────────────────────────────────── */}
         <div>
           <h2 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-gray-500" />Network Overview</h2>
-
-          {/* Stat row */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
             <StatCard icon={Trees} label="Active Partners" value={overview?.activePartners ?? '—'} sub={`${coverage}% geocoded`} color="green" />
             <StatCard icon={BookOpen} label="Programs" value={overview?.programs ?? '—'} sub={`${overview?.freePrograms ?? 0} free`} color="blue" />
             <StatCard icon={GraduationCap} label="Teachers" value={overview?.teachers ?? '—'} sub={`${overview?.districts ?? 0} districts`} color="purple" />
             <StatCard icon={School} label="Schools" value={overview?.schools ?? '—'} sub={`${overview?.districts ?? 0} districts`} color="orange" />
-          </div>
-
-          {/* Charts */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-4">
-            <ChartPanel title="Programs by Subject" subtitle="Programs tagged to each subject area" className="xl:col-span-2">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={subjects.slice(0, 8)} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="subject" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 10 }} width={28} />
-                  <Tooltip formatter={(v) => [`${v} programs`, 'Programs']} />
-                  <Bar dataKey="count" fill="#1B6B3A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartPanel>
-            <ChartPanel title="Partner Types" subtitle="Partners grouped by focus area">
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={types} dataKey="count" nameKey="label" outerRadius={70} innerRadius={36} paddingAngle={2}>
-                    {types.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v, _n, item) => [`${v} partners`, (item.payload as ChartDatum).label ?? 'Type']} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1 mt-1">
-                {types.map((t, i) => (
-                  <div key={t.type ?? t.label} className="flex items-center justify-between text-xs">
-                    <span className="flex items-center gap-1.5 text-gray-600 min-w-0">
-                      <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                      <span className="truncate">{t.label ?? t.type}</span>
-                    </span>
-                    <span className="font-semibold text-gray-800 ml-2">{t.count}</span>
-                  </div>
-                ))}
-              </div>
-            </ChartPanel>
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <ChartPanel title="Grade Coverage" subtitle="Programs per grade level">
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={grades} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="grade" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} width={28} />
-                  <Tooltip formatter={(v) => [`${v} programs`, 'Programs']} />
-                  <Bar dataKey="count" fill="#2563EB" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartPanel>
-
-            <ListPanel title="Most Engaged Programs" icon={Star} empty="No engagement data yet.">
-              {topPrograms.map((p) => (
-                <div key={p.id} className="flex items-center justify-between gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-900 truncate">{p.title}</p>
-                    <p className="text-[11px] text-gray-400 truncate">{p.partner_name}</p>
-                  </div>
-                  <span className="text-xs font-bold text-brand shrink-0">{p.engagement_count + p.bookmark_count}</span>
-                </div>
-              ))}
-            </ListPanel>
-
-            <ListPanel title="County Coverage" icon={Map} empty="No county data yet.">
-              {counties.slice(0, 6).map((c) => (
-                <div key={c.county} className="flex items-center justify-between gap-3 py-2 border-b border-gray-100 last:border-0">
-                  <p className="text-xs font-semibold text-gray-800 truncate">{c.county} County</p>
-                  <p className="text-[11px] text-gray-500 shrink-0">{c.programs}p · {c.partners}r</p>
-                </div>
-              ))}
-            </ListPanel>
           </div>
         </div>
       </div>
@@ -797,17 +704,6 @@ function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: 
   )
 }
 
-function ChartPanel({ title, subtitle, className = '', children }: { title: string; subtitle?: string; className?: string; children: React.ReactNode }) {
-  return (
-    <div className={`bg-white rounded-xl border border-app-border p-4 ${className}`}>
-      <p className="text-xs font-bold text-gray-900">{title}</p>
-      {subtitle && <p className="text-[11px] text-gray-400 mt-0.5 mb-3">{subtitle}</p>}
-      {!subtitle && <div className="mb-3" />}
-      {children}
-    </div>
-  )
-}
-
 function BookmarkItem({ bookmark, onRemove }: { bookmark: BookmarkRow; onRemove: () => void }) {
   const [removing, setRemoving] = useState(false)
   const grades = parseJsonArray(bookmark.grade_levels)
@@ -840,14 +736,3 @@ function BookmarkItem({ bookmark, onRemove }: { bookmark: BookmarkRow; onRemove:
   )
 }
 
-function ListPanel({ title, icon: Icon, empty, children }: { title: string; icon: any; empty: string; children: React.ReactNode }) {
-  const items = Array.isArray(children) ? children.filter(Boolean) : (children ? [children] : [])
-  return (
-    <div className="bg-white rounded-xl border border-app-border p-4">
-      <p className="text-xs font-bold text-gray-900 flex items-center gap-1.5 mb-3"><Icon className="w-3.5 h-3.5 text-gray-400" />{title}</p>
-      {items.length === 0
-        ? <p className="text-xs text-gray-400 text-center py-8">{empty}</p>
-        : children}
-    </div>
-  )
-}

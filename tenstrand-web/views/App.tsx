@@ -10,14 +10,23 @@ import { TeachersPage } from '@/views/Teachers/TeachersPage'
 import { AdminPage } from '@/views/Admin/AdminPage'
 import { SettingsPage } from '@/views/Settings/SettingsPage'
 import { CopilotPage } from '@/views/Copilot/CopilotPage'
-import { LessonPlansPage } from '@/views/LessonPlans/LessonPlansPage'
 import { ProspectorPage } from '@/views/Prospector/ProspectorPage'
 import { OnboardingPage } from '@/views/Onboarding/OnboardingPage'
 import { EquityPage } from '@/views/Equity/EquityPage'
 import { DigestsPage } from '@/views/Digests/DigestsPage'
+import { CommunityPage } from '@/views/Community/CommunityPage'
+import { LoginPage } from '@/views/Auth/LoginPage'
+import { SignupPage } from '@/views/Auth/SignupPage'
 import { useAppStore } from '@/store/app.store'
+import { useAuthStore } from '@/store/auth.store'
 import { invoke } from '@/lib/api'
 import { Toaster } from 'sonner'
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isLoggedIn } = useAuthStore()
+  if (!isLoggedIn) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
 
 export default function App() {
   const { setActiveTeacher, setHasClaudeKey } = useAppStore()
@@ -25,7 +34,6 @@ export default function App() {
 
   useEffect(() => {
     const boot = async () => {
-      // /api/init creates tables + seeds demo in one server-side batch call
       await fetch('/api/init', { method: 'POST' })
       const settings = await invoke<Record<string, string>>('settings:getAll').catch(() => ({} as Record<string, string>))
       setHasClaudeKey(!!(settings.claude_api_key?.trim() || settings.openai_api_key?.trim()))
@@ -53,14 +61,19 @@ export default function App() {
     <>
       <HashRouter>
         <Routes>
-          <Route element={<AppShell />}>
+          {/* Public auth routes */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+
+          {/* Protected app routes */}
+          <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/map" element={<MapPage />} />
+            <Route path="/community" element={<CommunityPage />} />
             <Route path="/partners" element={<PartnersPage />} />
             <Route path="/programs" element={<ProgramsPage />} />
             <Route path="/teachers" element={<TeachersPage />} />
             <Route path="/copilot" element={<CopilotPage />} />
-            <Route path="/lesson-plans" element={<LessonPlansPage />} />
             <Route path="/prospector" element={<ProspectorPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/equity" element={<EquityPage />} />
